@@ -3,6 +3,7 @@
 #include <gio/gio.h>
 
 #include "pps-document-info-private.h"
+#include "pps-document-variant-private.h"
 
 static const struct {
 	const char *name;
@@ -19,13 +20,6 @@ static const struct {
 	{ "security", G_STRUCT_OFFSET (PpsDocumentInfo, security) },
 };
 
-static void
-add_string (GVariantBuilder *builder, const char *name, const char *value)
-{
-	if (value)
-		g_variant_builder_add (builder, "{sv}", name, g_variant_new_string (value));
-}
-
 GVariant *
 _pps_document_info_to_variant (const PpsDocumentInfo *info)
 {
@@ -34,7 +28,7 @@ _pps_document_info_to_variant (const PpsDocumentInfo *info)
 	g_variant_builder_init (&builder, G_VARIANT_TYPE_VARDICT);
 	for (guint i = 0; i < G_N_ELEMENTS (string_fields); i++) {
 		char *const *value = G_STRUCT_MEMBER_P (info, string_fields[i].offset);
-		add_string (&builder, string_fields[i].name, *value);
+		_pps_variant_add_string (&builder, string_fields[i].name, *value);
 	}
 	g_variant_builder_add (&builder, "{sv}", "fields-mask", g_variant_new_uint32 (info->fields_mask));
 	g_variant_builder_add (&builder, "{sv}", "layout", g_variant_new_int32 (info->layout));
@@ -45,11 +39,11 @@ _pps_document_info_to_variant (const PpsDocumentInfo *info)
 	g_variant_builder_add (&builder, "{sv}", "contains-js", g_variant_new_int32 (info->contains_js));
 	if (info->creation_datetime) {
 		g_autofree char *date = g_date_time_format_iso8601 (info->creation_datetime);
-		add_string (&builder, "created", date);
+		_pps_variant_add_string (&builder, "created", date);
 	}
 	if (info->modified_datetime) {
 		g_autofree char *date = g_date_time_format_iso8601 (info->modified_datetime);
-		add_string (&builder, "modified", date);
+		_pps_variant_add_string (&builder, "modified", date);
 	}
 	if (info->page_sizes) {
 		GVariantBuilder sizes;
@@ -61,31 +55,19 @@ _pps_document_info_to_variant (const PpsDocumentInfo *info)
 	if (info->license) {
 		GVariantBuilder license;
 		g_variant_builder_init (&license, G_VARIANT_TYPE_VARDICT);
-		add_string (&license, "text", info->license->text);
-		add_string (&license, "uri", info->license->uri);
-		add_string (&license, "web-statement", info->license->web_statement);
+		_pps_variant_add_string (&license, "text", info->license->text);
+		_pps_variant_add_string (&license, "uri", info->license->uri);
+		_pps_variant_add_string (&license, "web-statement", info->license->web_statement);
 		g_variant_builder_add (&builder, "{sv}", "license", g_variant_builder_end (&license));
 	}
 	return g_variant_builder_end (&builder);
 }
 
 static gboolean
-read_string (GVariant *dictionary, const char *name, char **out)
-{
-	g_autoptr (GVariant) value = g_variant_lookup_value (dictionary, name, NULL);
-	if (!value)
-		return TRUE;
-	if (!g_variant_is_of_type (value, G_VARIANT_TYPE_STRING))
-		return FALSE;
-	*out = g_variant_dup_string (value, NULL);
-	return TRUE;
-}
-
-static gboolean
 read_date (GVariant *dictionary, const char *name, GDateTime **out)
 {
 	g_autofree char *text = NULL;
-	if (!read_string (dictionary, name, &text))
+	if (!_pps_variant_read_string (dictionary, name, &text))
 		return FALSE;
 	if (!text)
 		return TRUE;
@@ -116,7 +98,7 @@ _pps_document_info_from_variant (GVariant *value, GError **error)
 	info->contains_js = contains_js;
 	for (guint i = 0; i < G_N_ELEMENTS (string_fields); i++) {
 		char **out = G_STRUCT_MEMBER_P (info, string_fields[i].offset);
-		if (!read_string (value, string_fields[i].name, out))
+		if (!_pps_variant_read_string (value, string_fields[i].name, out))
 			goto invalid;
 	}
 	if (!read_date (value, "created", &info->creation_datetime) ||
@@ -136,9 +118,9 @@ _pps_document_info_from_variant (GVariant *value, GError **error)
 		if (!g_variant_is_of_type (license, G_VARIANT_TYPE_VARDICT))
 			goto invalid;
 		info->license = pps_document_license_new ();
-		if (!read_string (license, "text", &info->license->text) ||
-		    !read_string (license, "uri", &info->license->uri) ||
-		    !read_string (license, "web-statement", &info->license->web_statement))
+		if (!_pps_variant_read_string (license, "text", &info->license->text) ||
+		    !_pps_variant_read_string (license, "uri", &info->license->uri) ||
+		    !_pps_variant_read_string (license, "web-statement", &info->license->web_statement))
 			goto invalid;
 	}
 	return g_steal_pointer (&info);

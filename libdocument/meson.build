@@ -165,7 +165,10 @@ document_dbus = gnome.gdbus_codegen(
 libppsdocument = shared_library(
   'ppsdocument-' + pps_api_version,
   version: pps_document_version,
-  sources: sources + enum_sources + [version_header] + document_dbus + ['pps-document-session.c'],
+  sources: sources + enum_sources + [version_header] + document_dbus + [
+    'pps-document-session.c',
+    'pps-document-buffer.c',
+  ],
   include_directories: top_inc,
   dependencies: libdocument_deps,
   c_args: cflags,

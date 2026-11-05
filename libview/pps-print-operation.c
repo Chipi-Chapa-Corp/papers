@@ -1544,6 +1544,9 @@ pps_print_operation_print_set_print_settings (PpsPrintOperation *op,
 	PpsPrintOperationPrint *print = PPS_PRINT_OPERATION_PRINT (op);
 
 	print->autorotate = gtk_print_settings_has_key (print_settings, PPS_PRINT_SETTING_AUTOROTATE) ? gtk_print_settings_get_bool (print_settings, PPS_PRINT_SETTING_AUTOROTATE) : TRUE;
+	print->page_scale = gtk_print_settings_get_int_with_default (print_settings, PPS_PRINT_SETTING_PAGE_SCALE, PPS_SCALE_SHRINK_TO_PRINTABLE_AREA);
+	print->use_source_size = gtk_print_settings_get_bool (print_settings, PPS_PRINT_SETTING_PAGE_SIZE);
+	print->draw_borders = gtk_print_settings_get_bool (print_settings, PPS_PRINT_SETTING_DRAW_BORDERS);
 	gtk_print_operation_set_print_settings (print->op, print_settings);
 }
 
@@ -1967,7 +1970,7 @@ pps_print_operation_print_custom_widget_apply (PpsPrintOperationPrint *print,
 	gtk_print_settings_set_int (settings, PPS_PRINT_SETTING_PAGE_SCALE, print->page_scale);
 	gtk_print_settings_set_bool (settings, PPS_PRINT_SETTING_AUTOROTATE, print->autorotate);
 	gtk_print_settings_set_bool (settings, PPS_PRINT_SETTING_PAGE_SIZE, print->use_source_size);
-	gtk_print_settings_set_bool (settings, PPS_PRINT_SETTING_PAGE_SIZE, print->draw_borders);
+	gtk_print_settings_set_bool (settings, PPS_PRINT_SETTING_DRAW_BORDERS, print->draw_borders);
 }
 
 static gboolean

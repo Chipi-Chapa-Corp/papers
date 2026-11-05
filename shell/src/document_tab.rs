@@ -58,6 +58,8 @@ mod imp {
         pub(super) error_alert: TemplateChild<adw::AlertDialog>,
 
         pub(super) mode: Cell<WindowRunMode>,
+        #[property(get = |imp: &Self| imp.mode.get() == WindowRunMode::Presentation)]
+        pub(super) presenting: std::marker::PhantomData<bool>,
 
         #[property(get = Self::title)]
         pub(super) title: std::marker::PhantomData<String>,
@@ -245,6 +247,7 @@ mod imp {
             }
 
             self.mode.set(mode);
+            self.obj().notify_presenting();
 
             let stack = self.stack.clone();
 
@@ -368,9 +371,6 @@ mod imp {
         }
 
         fn stop_presentation(&self) {
-            let Some(window) = self.window() else {
-                return;
-            };
             let page = self.presentation.current_page();
             let rotation = self.presentation.rotation();
 
@@ -379,16 +379,17 @@ mod imp {
             model.set_page(page as i32);
             model.set_rotation(rotation as i32);
 
-            window
-                .lookup_action("fullscreen")
-                .and_downcast::<gio::SimpleAction>()
-                .unwrap()
-                .set_enabled(true);
-
             self.presentation
                 .set_document(papers_document::Document::NONE);
             self.set_mode(WindowRunMode::Normal);
-            window.unfullscreen();
+            if let Some(window) = self.window() {
+                window
+                    .lookup_action("fullscreen")
+                    .and_downcast::<gio::SimpleAction>()
+                    .unwrap()
+                    .set_enabled(true);
+                window.unfullscreen();
+            }
         }
 
         // Actions
@@ -1134,7 +1135,12 @@ impl PpsDocumentTab {
         self.imp().cmd_escape();
     }
     pub fn focus_view(&self) {
-        self.imp().document_view.focus_view();
+        if self.imp().mode.get() == WindowRunMode::Normal {
+            self.imp().document_view.focus_view();
+        }
+    }
+    pub fn handle_link(&self, dest: &LinkDest) {
+        self.imp().document_view.handle_link(dest);
     }
     pub fn open_copy_from(&self, source: &Self, dest: Option<&LinkDest>) {
         self.imp().file.replace(source.imp().file.borrow().clone());

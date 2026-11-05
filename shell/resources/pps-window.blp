@@ -18,9 +18,13 @@ template $PpsWindow: Adw.ApplicationWindow {
   height-request: 360;
   notify::fullscreened => $window_fullscreened() swapped;
 
-  content: $PpsDocumentTab document_tab {
-    close-finished => $document_tab_close_finished() swapped;
-    open-copy => $document_tab_open_copy() swapped;
+  content: Adw.ToolbarView {
+    [top]
+    Adw.TabBar tab_bar {
+      view: tabs;
+    }
+
+    content: Adw.TabView tabs {};
   };
 
   DropTarget {

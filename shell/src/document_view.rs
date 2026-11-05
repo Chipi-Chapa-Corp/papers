@@ -926,6 +926,10 @@ impl PpsDocumentView {
         self.imp().print_range(start, end)
     }
 
+    pub fn handle_link(&self, dest: &LinkDest) {
+        self.imp().handle_link(dest);
+    }
+
     pub fn metadata(&self) -> Option<papers_view::Metadata> {
         self.imp().metadata()
     }

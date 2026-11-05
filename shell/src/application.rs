@@ -156,7 +156,9 @@ mod imp {
         }
 
         fn open_start_view(&self) {
-            PpsWindow::default().present();
+            let window = PpsWindow::default();
+            window.new_tab();
+            window.present();
         }
 
         fn open_file_at_dest(

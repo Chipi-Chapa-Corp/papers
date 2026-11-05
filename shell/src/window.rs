@@ -1,4 +1,6 @@
 use crate::deps::*;
+use glib::closure_local;
+use std::cell::Cell;
 use std::path::PathBuf;
 
 use glib::UserDirectory;
@@ -30,7 +32,12 @@ mod imp {
     #[template(resource = "/org/gnome/papers/ui/window.ui")]
     pub struct PpsWindow {
         #[template_child]
-        pub(super) document_tab: TemplateChild<PpsDocumentTab>,
+        pub(super) tabs: TemplateChild<adw::TabView>,
+        #[template_child]
+        pub(super) tab_bar: TemplateChild<adw::TabBar>,
+        pub(super) selected_tab: RefCell<Option<PpsDocumentTab>>,
+        pub(super) selected_bindings: RefCell<Vec<glib::Binding>>,
+        pub(super) closing: Cell<bool>,
         #[template_child]
         pub(super) settings: TemplateChild<gio::Settings>,
         #[template_child]
@@ -62,10 +69,7 @@ mod imp {
                 self.obj().add_css_class("devel");
             }
             self.setup_actions();
-            self.document_tab
-                .bind_property("title", self.obj().as_ref(), "title")
-                .sync_create()
-                .build();
+            self.setup_tabs();
             self.obj()
                 .change_action_state("night-mode", &self.settings.boolean("night-mode").into());
         }
@@ -77,7 +81,8 @@ mod imp {
     impl WidgetImpl for PpsWindow {}
     impl WindowImpl for PpsWindow {
         fn close_request(&self) -> glib::Propagation {
-            self.document_tab.request_close();
+            self.closing.set(true);
+            self.close_next_tab();
             glib::Propagation::Stop
         }
     }
@@ -101,7 +106,9 @@ mod imp {
                         #[weak(rename_to = obj)]
                         self,
                         move |_, _, _| {
-                            obj.obj().close();
+                            if let Some(page) = obj.tabs.selected_page() {
+                                obj.tabs.close_page(&page);
+                            }
                         }
                     ))
                     .build(),
@@ -113,7 +120,9 @@ mod imp {
                         move |_, action, state| {
                             let enabled = state.and_then(|v| v.get::<bool>()).unwrap();
 
-                            obj.document_tab.set_fullscreen_mode(enabled);
+                            if let Some(tab) = obj.current_tab() {
+                                tab.set_fullscreen_mode(enabled);
+                            }
 
                             if enabled {
                                 obj.obj().fullscreen();
@@ -130,7 +139,9 @@ mod imp {
                         #[weak(rename_to = obj)]
                         self,
                         move |_, _, _| {
-                            obj.document_tab.escape();
+                            if let Some(tab) = obj.current_tab() {
+                                tab.escape();
+                            }
                         }
                     ))
                     .build(),
@@ -154,7 +165,9 @@ mod imp {
                         #[weak(rename_to = obj)]
                         self,
                         move |_, _, _| {
-                            obj.document_tab.present_document();
+                            if let Some(tab) = obj.current_tab() {
+                                tab.present_document();
+                            }
                         }
                     ))
                     .build(),
@@ -191,8 +204,8 @@ mod imp {
                                 #[weak(rename_to = obj)]
                                 obj,
                                 move || {
-                                    if !obj.document_tab.is_presenting() {
-                                        obj.document_tab.focus_view()
+                                    if let Some(tab) = obj.current_tab() {
+                                        tab.focus_view();
                                     }
                                 }
                             ),
@@ -203,7 +216,12 @@ mod imp {
         }
 
         fn set_night_mode(&self, night_mode: bool) {
-            self.document_tab.set_inverted_colors(night_mode);
+            for page in self.tabs.pages().iter::<adw::TabPage>().flatten() {
+                page.child()
+                    .downcast::<PpsDocumentTab>()
+                    .unwrap()
+                    .set_inverted_colors(night_mode);
+            }
 
             let manager = adw::StyleManager::for_display(&WidgetExt::display(&self.obj().clone()));
 
@@ -293,20 +311,175 @@ mod imp {
             ));
         }
 
+        pub(super) fn current_tab(&self) -> Option<PpsDocumentTab> {
+            self.tabs
+                .selected_page()
+                .map(|page| page.child().downcast().unwrap())
+        }
+
+        fn setup_tabs(&self) {
+            self.tabs.connect_close_page(|_, page| {
+                page.child()
+                    .downcast::<PpsDocumentTab>()
+                    .unwrap()
+                    .request_close();
+                glib::Propagation::Stop
+            });
+            self.tabs.connect_selected_page_notify(glib::clone!(
+                #[weak(rename_to = obj)]
+                self,
+                move |_| obj.selected_page_changed()
+            ));
+            self.tabs.connect_page_detached(glib::clone!(
+                #[weak(rename_to = obj)]
+                self,
+                move |view, _, _| {
+                    if view.n_pages() == 0 {
+                        obj.obj().destroy();
+                    }
+                }
+            ));
+            self.tabs.connect_create_window(|_| {
+                let window = super::PpsWindow::new();
+                window.present();
+                Some(window.imp().tabs.get())
+            });
+        }
+
+        fn selected_page_changed(&self) {
+            let tab = self.current_tab();
+            if let Some(previous) = self.selected_tab.replace(tab.clone())
+                && previous.is_presenting()
+            {
+                previous.escape();
+                self.obj().unfullscreen();
+                self.obj()
+                    .lookup_action("fullscreen")
+                    .and_downcast::<gio::SimpleAction>()
+                    .unwrap()
+                    .set_enabled(true);
+            }
+            for binding in self.selected_bindings.borrow_mut().drain(..) {
+                binding.unbind();
+            }
+            if let Some(tab) = tab {
+                self.selected_bindings.borrow_mut().extend([
+                    tab.bind_property("title", self.obj().as_ref(), "title")
+                        .sync_create()
+                        .build(),
+                    tab.bind_property("presenting", &self.tab_bar.get(), "visible")
+                        .invert_boolean()
+                        .sync_create()
+                        .build(),
+                ]);
+                tab.set_fullscreen_mode(self.obj().is_fullscreen());
+                tab.focus_view();
+            } else {
+                self.obj().set_title(Some(&gettext("Document Viewer")));
+            }
+        }
+
+        fn append_tab(&self, tab: &PpsDocumentTab) -> adw::TabPage {
+            tab.connect_closure(
+                "close-finished",
+                false,
+                closure_local!(move |tab: PpsDocumentTab, allowed: bool| {
+                    if let Some(window) = tab.root().and_downcast::<super::PpsWindow>() {
+                        window.imp().finish_close(&tab, allowed);
+                    }
+                }),
+            );
+            tab.connect_closure(
+                "open-copy",
+                false,
+                closure_local!(move |tab: PpsDocumentTab, dest: Option<LinkDest>| {
+                    if let Some(window) = tab.root().and_downcast::<super::PpsWindow>() {
+                        window.imp().open_copy(&tab, dest.as_ref());
+                    }
+                }),
+            );
+            let page = self.tabs.append(tab);
+            tab.bind_property("title", &page, "title")
+                .sync_create()
+                .build();
+            tab.bind_property("loading", &page, "loading")
+                .sync_create()
+                .build();
+            tab.bind_property("modified", &page, "indicator-icon")
+                .transform_to(|_, modified: bool| {
+                    Some(modified.then(|| {
+                        gio::ThemedIcon::new("document-edit-symbolic").upcast::<gio::Icon>()
+                    }))
+                })
+                .sync_create()
+                .build();
+            page.set_indicator_tooltip(&gettext("Unsaved Changes"));
+            self.tabs.set_selected_page(&page);
+            page
+        }
+
+        fn finish_close(&self, tab: &PpsDocumentTab, allowed: bool) {
+            let page = self.tabs.page(tab);
+            if !allowed {
+                self.closing.set(false);
+            }
+            self.tabs.close_page_finish(&page, allowed);
+            if self.closing.get() {
+                glib::idle_add_local_once(glib::clone!(
+                    #[weak(rename_to = obj)]
+                    self,
+                    move || obj.close_next_tab()
+                ));
+            }
+        }
+
+        fn close_next_tab(&self) {
+            if self.tabs.n_pages() == 0 {
+                self.obj().destroy();
+            } else {
+                let page = self.tabs.nth_page(0);
+                self.tabs.set_selected_page(&page);
+                self.tabs.close_page(&page);
+            }
+        }
+
+        pub(super) fn new_tab(&self) -> PpsDocumentTab {
+            if self.tabs.n_pages() == 0 {
+                self.setup_window_size();
+            }
+            let tab = PpsDocumentTab::new();
+            self.append_tab(&tab);
+            tab
+        }
+
         pub(super) fn open(
             &self,
             file: &gio::File,
             dest: Option<&LinkDest>,
             mode: Option<WindowRunMode>,
         ) {
-            if self.document_tab.is_empty() {
-                self.setup_window_size();
+            for page in self.tabs.pages().iter::<adw::TabPage>().flatten() {
+                let tab = page.child().downcast::<PpsDocumentTab>().unwrap();
+                if tab.uri().as_deref() == Some(file.uri().as_str()) {
+                    self.tabs.set_selected_page(&page);
+                    if tab.document().is_some()
+                        && let Some(dest) = dest
+                    {
+                        tab.handle_link(dest);
+                    }
+                    return;
+                }
             }
-            self.document_tab.open(file, dest, mode);
+            let tab = self
+                .current_tab()
+                .filter(|tab| tab.is_empty())
+                .unwrap_or_else(|| self.new_tab());
+            tab.open(file, dest, mode);
         }
+
         fn open_copy(&self, source: &PpsDocumentTab, dest: Option<&LinkDest>) {
             let win = super::PpsWindow::new();
-            win.imp().document_tab.open_copy_from(source, dest);
+            win.new_tab().open_copy_from(source, dest);
             win.set_default_size(self.obj().width(), self.obj().height());
             win.present();
         }
@@ -314,16 +487,6 @@ mod imp {
 
     #[gtk::template_callbacks]
     impl PpsWindow {
-        #[template_callback]
-        fn document_tab_open_copy(&self, dest: Option<LinkDest>, source: &PpsDocumentTab) {
-            self.open_copy(source, dest.as_ref());
-        }
-        #[template_callback]
-        fn document_tab_close_finished(&self, allowed: bool) {
-            if allowed {
-                self.obj().destroy();
-            }
-        }
         #[template_callback]
         fn window_fullscreened(&self) {
             let obj = self.obj();
@@ -358,7 +521,7 @@ mod imp {
 
             for file in file_list.files() {
                 let uri = file.uri();
-                let current_uri = self.document_tab.uri();
+                let current_uri = self.current_tab().and_then(|tab| tab.uri());
 
                 // Only open the file if we don't have an uri, or if it's
                 // different to our current one. Don't reload the current open
@@ -391,8 +554,12 @@ impl PpsWindow {
             .build()
     }
 
+    pub fn new_tab(&self) -> PpsDocumentTab {
+        self.imp().new_tab()
+    }
+
     pub fn uri(&self) -> Option<String> {
-        self.imp().document_tab.uri()
+        self.imp().current_tab().and_then(|tab| tab.uri())
     }
 
     pub fn open(
@@ -405,19 +572,21 @@ impl PpsWindow {
     }
 
     pub fn document(&self) -> Option<papers_document::Document> {
-        self.imp().document_tab.document()
+        self.imp().current_tab().and_then(|tab| tab.document())
     }
 
     pub fn is_empty(&self) -> bool {
-        self.imp().document_tab.is_empty()
+        self.imp().current_tab().is_none_or(|tab| tab.is_empty())
     }
 
     pub fn metadata(&self) -> Option<papers_view::Metadata> {
-        self.imp().document_tab.metadata()
+        self.imp().current_tab().and_then(|tab| tab.metadata())
     }
 
     pub fn print_range(&self, first_page: i32, last_page: i32) {
-        self.imp().document_tab.print_range(first_page, last_page);
+        if let Some(tab) = self.imp().current_tab() {
+            tab.print_range(first_page, last_page);
+        }
     }
 }
 

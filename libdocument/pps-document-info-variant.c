@@ -37,14 +37,8 @@ _pps_document_info_to_variant (const PpsDocumentInfo *info)
 	g_variant_builder_add (&builder, "{sv}", "permissions", g_variant_new_uint32 (info->permissions));
 	g_variant_builder_add (&builder, "{sv}", "n-pages", g_variant_new_int32 (info->n_pages));
 	g_variant_builder_add (&builder, "{sv}", "contains-js", g_variant_new_int32 (info->contains_js));
-	if (info->creation_datetime) {
-		g_autofree char *date = g_date_time_format_iso8601 (info->creation_datetime);
-		_pps_variant_add_string (&builder, "created", date);
-	}
-	if (info->modified_datetime) {
-		g_autofree char *date = g_date_time_format_iso8601 (info->modified_datetime);
-		_pps_variant_add_string (&builder, "modified", date);
-	}
+	_pps_variant_add_date (&builder, "created", info->creation_datetime);
+	_pps_variant_add_date (&builder, "modified", info->modified_datetime);
 	if (info->page_sizes) {
 		GVariantBuilder sizes;
 		g_variant_builder_init (&sizes, G_VARIANT_TYPE ("a(dd)"));
@@ -61,18 +55,6 @@ _pps_document_info_to_variant (const PpsDocumentInfo *info)
 		g_variant_builder_add (&builder, "{sv}", "license", g_variant_builder_end (&license));
 	}
 	return g_variant_builder_end (&builder);
-}
-
-static gboolean
-read_date (GVariant *dictionary, const char *name, GDateTime **out)
-{
-	g_autofree char *text = NULL;
-	if (!_pps_variant_read_string (dictionary, name, &text))
-		return FALSE;
-	if (!text)
-		return TRUE;
-	*out = g_date_time_new_from_iso8601 (text, NULL);
-	return *out != NULL;
 }
 
 PpsDocumentInfo *
@@ -101,8 +83,8 @@ _pps_document_info_from_variant (GVariant *value, GError **error)
 		if (!_pps_variant_read_string (value, string_fields[i].name, out))
 			goto invalid;
 	}
-	if (!read_date (value, "created", &info->creation_datetime) ||
-	    !read_date (value, "modified", &info->modified_datetime))
+	if (!_pps_variant_read_date (value, "created", &info->creation_datetime) ||
+	    !_pps_variant_read_date (value, "modified", &info->modified_datetime))
 		goto invalid;
 	sizes = g_variant_lookup_value (value, "page-sizes", NULL);
 	if (sizes) {

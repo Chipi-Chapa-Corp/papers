@@ -13,3 +13,7 @@ PPS_PRIVATE
 void _pps_variant_add_string (GVariantBuilder *builder, const char *name, const char *value);
 PPS_PRIVATE
 gboolean _pps_variant_read_string (GVariant *dictionary, const char *name, char **out);
+PPS_PRIVATE
+void _pps_variant_add_date (GVariantBuilder *builder, const char *name, GDateTime *date);
+PPS_PRIVATE
+gboolean _pps_variant_read_date (GVariant *dictionary, const char *name, GDateTime **out);

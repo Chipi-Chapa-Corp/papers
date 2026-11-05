@@ -8,6 +8,8 @@
 
 #include <config.h>
 
+#include "pps-document-proxy-private.h"
+#include "pps-print-operation-private.h"
 #include "pps-print-operation.h"
 
 #include <glib/gi18n.h>
@@ -1517,6 +1519,7 @@ struct _PpsPrintOperationPrint {
 	gboolean use_source_size;
 	GtkWidget *borders_button;
 	gboolean draw_borders;
+	gboolean run_in_main_context;
 };
 
 struct _PpsPrintOperationPrintClass {
@@ -1869,7 +1872,10 @@ pps_print_operation_print_draw_page (PpsPrintOperationPrint *print,
 	}
 
 	pps_job_print_set_cairo (PPS_JOB_PRINT (print->job_print), cr);
-	pps_job_scheduler_push_job (print->job_print, PPS_JOB_PRIORITY_NONE);
+	if (print->run_in_main_context)
+		pps_job_run (print->job_print);
+	else
+		pps_job_scheduler_push_job (print->job_print, PPS_JOB_PRIORITY_NONE);
 }
 
 static GObject *
@@ -2066,6 +2072,137 @@ pps_print_operation_print_class_init (PpsPrintOperationPrintClass *klass)
 	g_object_class->finalize = pps_print_operation_print_finalize;
 }
 
+/* Native printing stays in the process that owns the backend. */
+PpsPrintOperation *
+_pps_print_operation_new_for_worker (PpsDocument *document)
+{
+	PpsPrintOperation *op = g_object_new (PPS_TYPE_PRINT_OPERATION_PRINT, "document", document, NULL);
+	PPS_PRINT_OPERATION_PRINT (op)->run_in_main_context = TRUE;
+	return op;
+}
+
+typedef struct {
+	PpsPrintOperationPrint parent;
+	GError *error;
+	guint subscription;
+	gboolean running;
+} PpsPrintOperationRemote;
+
+typedef PpsPrintOperationPrintClass PpsPrintOperationRemoteClass;
+
+static GType pps_print_operation_remote_get_type (void);
+G_DEFINE_TYPE (PpsPrintOperationRemote, pps_print_operation_remote, PPS_TYPE_PRINT_OPERATION_PRINT)
+
+static void
+remote_print_signal (GDBusConnection *connection, const char *sender, const char *path, const char *interface, const char *signal, GVariant *parameters, gpointer data)
+{
+	PpsPrintOperation *op = data;
+	if (g_str_equal (signal, "PrintBegun")) {
+		g_signal_emit (op, signals[BEGIN_PRINT], 0);
+	} else if (g_str_equal (signal, "PrintProgress")) {
+		const char *status;
+		g_variant_get (parameters, "(&sd)", &status, &op->progress);
+		g_free (op->status);
+		op->status = g_strdup (status);
+		g_signal_emit (op, signals[STATUS_CHANGED], 0);
+	}
+}
+
+static void
+remote_print_done (GObject *source, GAsyncResult *result, gpointer data)
+{
+	PpsPrintOperation *op = data;
+	PpsPrintOperationRemote *remote = (PpsPrintOperationRemote *) op;
+	PpsDocumentSession *session = _pps_document_proxy_get_session (op->document);
+	g_autoptr (GVariant) settings_data = NULL;
+	g_autoptr (GVariant) setup_data = NULL;
+	int response = GTK_PRINT_OPERATION_RESULT_ERROR;
+	if (pps_dbus_document_call_print_finish (PPS_DBUS_DOCUMENT (source), &response,
+	                                         &settings_data, &setup_data, result, &remote->error)) {
+		g_autoptr (GtkPrintSettings) settings = gtk_print_settings_new_from_gvariant (settings_data);
+		g_autoptr (GtkPageSetup) setup = gtk_page_setup_new_from_gvariant (setup_data);
+		if (settings && setup) {
+			pps_print_operation_set_print_settings (op, settings);
+			pps_print_operation_set_default_page_setup (op, setup);
+		} else {
+			response = GTK_PRINT_OPERATION_RESULT_ERROR;
+			g_set_error_literal (&remote->error, G_IO_ERROR, G_IO_ERROR_INVALID_DATA, "Invalid print response");
+		}
+	}
+	g_dbus_connection_signal_unsubscribe (session->connection, remote->subscription);
+	remote->subscription = 0;
+	remote->running = FALSE;
+	g_signal_emit (op, signals[DONE], 0, response);
+	g_object_unref (op);
+}
+
+static void
+remote_print_run (PpsPrintOperation *op, GtkWindow *parent)
+{
+	PpsPrintOperationRemote *remote = (PpsPrintOperationRemote *) op;
+	PpsPrintOperationPrint *print = PPS_PRINT_OPERATION_PRINT (op);
+	PpsDocumentSession *session = _pps_document_proxy_get_session (op->document);
+	g_return_if_fail (!remote->running);
+	g_clear_error (&remote->error);
+	remote->running = TRUE;
+	remote->subscription = g_dbus_connection_signal_subscribe (
+	    session->connection, NULL, "org.gnome.Papers.Document", NULL,
+	    PPS_DOCUMENT_WORKER_PATH, NULL, G_DBUS_SIGNAL_FLAGS_NONE,
+	    remote_print_signal, op, NULL);
+	GtkPrintSettings *settings = pps_print_operation_get_print_settings (op);
+	GtkPageSetup *setup = pps_print_operation_get_default_page_setup (op);
+	g_autoptr (GtkPrintSettings) default_settings = settings ? NULL : gtk_print_settings_new ();
+	g_autoptr (GtkPageSetup) default_setup = setup ? NULL : gtk_page_setup_new ();
+	int current_page;
+	g_object_get (print->op, "current-page", &current_page, NULL);
+	pps_dbus_document_call_print (
+	    session->proxy,
+	    gtk_print_settings_to_gvariant (settings ? settings : default_settings),
+	    gtk_page_setup_to_gvariant (setup ? setup : default_setup),
+	    pps_print_operation_get_job_name (op), MAX (0, current_page),
+	    pps_print_operation_get_embed_page_setup (op), G_DBUS_CALL_FLAGS_NONE,
+	    G_MAXINT, NULL, remote_print_done, g_object_ref (op));
+}
+
+static void
+remote_print_cancel (PpsPrintOperation *op)
+{
+	PpsPrintOperationRemote *remote = (PpsPrintOperationRemote *) op;
+	if (remote->running)
+		pps_dbus_document_call_cancel_print (_pps_document_proxy_get_session (op->document)->proxy,
+		                                     G_DBUS_CALL_FLAGS_NONE, -1, NULL, NULL, NULL);
+}
+
+static void
+remote_print_get_error (PpsPrintOperation *op, GError **error)
+{
+	PpsPrintOperationRemote *remote = (PpsPrintOperationRemote *) op;
+	if (error && remote->error)
+		*error = g_error_copy (remote->error);
+}
+
+static void
+remote_print_finalize (GObject *object)
+{
+	g_clear_error (&((PpsPrintOperationRemote *) object)->error);
+	G_OBJECT_CLASS (pps_print_operation_remote_parent_class)->finalize (object);
+}
+
+static void
+pps_print_operation_remote_init (PpsPrintOperationRemote *remote)
+{
+}
+
+static void
+pps_print_operation_remote_class_init (PpsPrintOperationRemoteClass *klass)
+{
+	PpsPrintOperationClass *op_class = PPS_PRINT_OPERATION_CLASS (klass);
+	op_class->run = remote_print_run;
+	op_class->cancel = remote_print_cancel;
+	op_class->get_error = remote_print_get_error;
+	G_OBJECT_CLASS (klass)->finalize = remote_print_finalize;
+}
+
 /* Factory functions */
 
 static GType
@@ -2076,6 +2213,12 @@ pps_print_operation_get_gtype_for_document (PpsDocument *document)
 
 	/* Allow to override the selection by an env var */
 	env = g_getenv ("PPS_PRINT");
+	if (PPS_IS_DOCUMENT_PROXY (document) && g_strcmp0 (env, "export") != 0) {
+		gboolean native_print = FALSE;
+		g_variant_lookup (_pps_document_proxy_get_metadata (document), "has-native-print", "b", &native_print);
+		if (native_print)
+			return pps_print_operation_remote_get_type ();
+	}
 
 	if (PPS_IS_DOCUMENT_PRINT (document) && g_strcmp0 (env, "export") != 0) {
 		type = PPS_TYPE_PRINT_OPERATION_PRINT;

@@ -272,6 +272,7 @@ document_worker_sources = files(
   'pps-document-worker-media.c',
   'pps-document-worker-export.c',
   'pps-document-worker-signatures.c',
+  'pps-document-worker-print.c',
 )
 document_worker_sources += document_dbus[1]
 document_worker_cflags = cflags

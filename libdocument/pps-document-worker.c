@@ -254,6 +254,7 @@ get_info (PpsDBusDocument *interface,
 		g_variant_dict_insert (&properties, "can-sign", "b", pps_document_signatures_can_sign (PPS_DOCUMENT_SIGNATURES (worker->document)));
 		g_variant_dict_insert (&properties, "has-signatures", "b", pps_document_signatures_has_signatures (PPS_DOCUMENT_SIGNATURES (worker->document)));
 	}
+	g_variant_dict_insert (&properties, "has-native-print", "b", PPS_IS_DOCUMENT_PRINT (worker->document));
 	pps_dbus_document_complete_get_info (interface, invocation,
 	                                     g_variant_dict_end (&properties),
 	                                     g_variant_builder_end (&pages),
@@ -410,6 +411,7 @@ main (int argc, char **argv)
 	pps_document_worker_bind_media (&worker, interface);
 	pps_document_worker_bind_exporter (&worker, interface);
 	pps_document_worker_bind_signatures (&worker, interface);
+	pps_document_worker_bind_print (&worker, interface);
 	if (!g_dbus_interface_skeleton_export (G_DBUS_INTERFACE_SKELETON (interface),
 	                                       connection, PPS_DOCUMENT_WORKER_PATH, &error)) {
 		pps_shutdown ();
@@ -419,6 +421,7 @@ main (int argc, char **argv)
 	g_dbus_connection_start_message_processing (connection);
 	g_main_loop_run (loop);
 	g_dbus_interface_skeleton_unexport (G_DBUS_INTERFACE_SKELETON (interface));
+	g_clear_object (&worker.print_operation);
 	pps_document_worker_clear_exporter (&worker);
 	pps_document_worker_clear_links (&worker);
 	g_clear_pointer (&worker.forms, g_hash_table_unref);

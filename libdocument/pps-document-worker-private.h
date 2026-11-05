@@ -10,6 +10,7 @@
 
 typedef struct {
 	PpsDocument *document;
+	GObject *print_operation;
 	gboolean loaded;
 	int export_fd;
 	PpsDocumentObjects *objects;
@@ -38,6 +39,7 @@ void pps_document_worker_bind_transition (Worker *worker, PpsDBusDocument *inter
 void pps_document_worker_bind_media (Worker *worker, PpsDBusDocument *interface);
 void pps_document_worker_bind_exporter (Worker *worker, PpsDBusDocument *interface);
 void pps_document_worker_bind_signatures (Worker *worker, PpsDBusDocument *interface);
+void pps_document_worker_bind_print (Worker *worker, PpsDBusDocument *interface);
 void pps_document_worker_clear_exporter (Worker *worker);
 void pps_document_worker_clear_links (Worker *worker);
 gboolean pps_document_worker_check_document (Worker *worker, GType capability, GDBusMethodInvocation *invocation);

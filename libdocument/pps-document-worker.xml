@@ -3,6 +3,22 @@
 <node>
   <!-- Private peer interface, shared by one document and its worker. -->
   <interface name="org.gnome.Papers.Document">
+    <method name="Print">
+      <arg name="settings" type="a{sv}" direction="in"/>
+      <arg name="page_setup" type="a{sv}" direction="in"/>
+      <arg name="title" type="s" direction="in"/>
+      <arg name="current_page" type="i" direction="in"/>
+      <arg name="embed_page_setup" type="b" direction="in"/>
+      <arg name="result" type="i" direction="out"/>
+      <arg name="settings" type="a{sv}" direction="out"/>
+      <arg name="page_setup" type="a{sv}" direction="out"/>
+    </method>
+    <method name="CancelPrint"/>
+    <signal name="PrintBegun"/>
+    <signal name="PrintProgress">
+      <arg name="status" type="s"/>
+      <arg name="progress" type="d"/>
+    </signal>
     <method name="GetSignatures">
       <arg name="signatures" type="aa{sv}" direction="out"/>
     </method>

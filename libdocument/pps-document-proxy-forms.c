@@ -25,6 +25,7 @@ decode_field (GVariant *value, gpointer data, GError **error)
 static PpsMappingList *
 get_fields (PpsDocumentForms *document, PpsPage *page)
 {
+	g_autoptr (PpsDocumentForms) hold = g_object_ref (document);
 	g_autoptr (GVariant) mappings = NULL;
 	g_autoptr (GError) error = NULL;
 	gboolean present;
@@ -45,6 +46,7 @@ is_modified (PpsDocumentForms *document)
 static char *
 get_text (PpsDocumentForms *document, PpsFormField *field)
 {
+	g_autoptr (PpsDocumentForms) hold = g_object_ref (document);
 	g_autofree char *text = NULL;
 	gboolean present;
 	if (!pps_dbus_document_call_get_form_text_sync (get_proxy (document), field_id (document, field),
@@ -57,6 +59,7 @@ get_text (PpsDocumentForms *document, PpsFormField *field)
 static void
 set_text (PpsDocumentForms *document, PpsFormField *field, const char *text)
 {
+	g_autoptr (PpsDocumentForms) hold = g_object_ref (document);
 	guint state;
 	if (pps_dbus_document_call_set_form_text_sync (get_proxy (document), field_id (document, field), text != NULL, text ? text : "",
 	                                               G_DBUS_CALL_FLAGS_NONE, -1, &state, NULL, NULL))
@@ -66,6 +69,7 @@ set_text (PpsDocumentForms *document, PpsFormField *field, const char *text)
 static gboolean
 get_button (PpsDocumentForms *document, PpsFormField *field)
 {
+	g_autoptr (PpsDocumentForms) hold = g_object_ref (document);
 	gboolean state = FALSE;
 	pps_dbus_document_call_get_form_button_state_sync (get_proxy (document), field_id (document, field),
 	                                                   G_DBUS_CALL_FLAGS_NONE, -1, &state, NULL, NULL);
@@ -75,6 +79,7 @@ get_button (PpsDocumentForms *document, PpsFormField *field)
 static void
 set_button (PpsDocumentForms *document, PpsFormField *field, gboolean active)
 {
+	g_autoptr (PpsDocumentForms) hold = g_object_ref (document);
 	guint state;
 	if (pps_dbus_document_call_set_form_button_state_sync (get_proxy (document), field_id (document, field), active,
 	                                                       G_DBUS_CALL_FLAGS_NONE, -1, &state, NULL, NULL))
@@ -84,6 +89,7 @@ set_button (PpsDocumentForms *document, PpsFormField *field, gboolean active)
 static int
 get_choice_count (PpsDocumentForms *document, PpsFormField *field)
 {
+	g_autoptr (PpsDocumentForms) hold = g_object_ref (document);
 	int count = -1;
 	pps_dbus_document_call_get_form_choice_count_sync (get_proxy (document), field_id (document, field),
 	                                                   G_DBUS_CALL_FLAGS_NONE, -1, &count, NULL, NULL);
@@ -93,6 +99,7 @@ get_choice_count (PpsDocumentForms *document, PpsFormField *field)
 static char *
 get_choice_item (PpsDocumentForms *document, PpsFormField *field, int index)
 {
+	g_autoptr (PpsDocumentForms) hold = g_object_ref (document);
 	g_autofree char *text = NULL;
 	gboolean present;
 	if (!pps_dbus_document_call_get_form_choice_item_sync (get_proxy (document), field_id (document, field), index,
@@ -105,6 +112,7 @@ get_choice_item (PpsDocumentForms *document, PpsFormField *field, int index)
 static gboolean
 get_choice_selected (PpsDocumentForms *document, PpsFormField *field, int index)
 {
+	g_autoptr (PpsDocumentForms) hold = g_object_ref (document);
 	gboolean selected = FALSE;
 	pps_dbus_document_call_get_form_choice_selected_sync (get_proxy (document), field_id (document, field), index,
 	                                                      G_DBUS_CALL_FLAGS_NONE, -1, &selected, NULL, NULL);
@@ -114,6 +122,7 @@ get_choice_selected (PpsDocumentForms *document, PpsFormField *field, int index)
 static void
 select_choice (PpsDocumentForms *document, PpsFormField *field, int index, gboolean toggle)
 {
+	g_autoptr (PpsDocumentForms) hold = g_object_ref (document);
 	guint state;
 	if (pps_dbus_document_call_select_form_choice_sync (get_proxy (document), field_id (document, field), index, toggle,
 	                                                    G_DBUS_CALL_FLAGS_NONE, -1, &state, NULL, NULL))
@@ -135,6 +144,7 @@ toggle_item (PpsDocumentForms *document, PpsFormField *field, int index)
 static void
 unselect_choice (PpsDocumentForms *document, PpsFormField *field)
 {
+	g_autoptr (PpsDocumentForms) hold = g_object_ref (document);
 	guint state;
 	if (pps_dbus_document_call_unselect_form_choice_sync (get_proxy (document), field_id (document, field),
 	                                                      G_DBUS_CALL_FLAGS_NONE, -1, &state, NULL, NULL))
@@ -144,6 +154,7 @@ unselect_choice (PpsDocumentForms *document, PpsFormField *field)
 static void
 reset_form (PpsDocumentForms *document, PpsLinkAction *action)
 {
+	g_autoptr (PpsDocumentForms) hold = g_object_ref (document);
 	g_autoptr (GPtrArray) fields = g_ptr_array_new ();
 	guint state;
 	for (GList *item = pps_link_action_get_reset_fields (action); item; item = item->next)

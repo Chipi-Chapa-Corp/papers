@@ -5,6 +5,7 @@
 #include <glib/gstdio.h>
 #include <unistd.h>
 
+#include "pps-document-call-private.h"
 #include "pps-document-proxy-private.h"
 #include "pps-document-signature-private.h"
 
@@ -15,6 +16,7 @@ typedef struct {
 	gpointer data;
 	GMainContext *context;
 	GThread *thread;
+	GWeakRef proxy;
 } PasswordCallback;
 
 static void
@@ -23,6 +25,7 @@ free_callback (gpointer data)
 	PasswordCallback *state = data;
 	g_main_context_unref (state->context);
 	g_thread_unref (state->thread);
+	g_weak_ref_clear (&state->proxy);
 	g_free (state);
 }
 
@@ -38,7 +41,12 @@ request_password (PpsDBusSignaturePasswords *interface, GDBusMethodInvocation *i
 {
 	/* The callback can run a nested loop and close or move its document. */
 	g_autoptr (PpsDBusSignaturePasswords) hold = g_object_ref (interface);
+	g_autoptr (GObject) proxy = g_weak_ref_get (&state->proxy);
+	if (proxy)
+		g_object_set_data (proxy, PPS_DOCUMENT_PASSWORD_PENDING, GINT_TO_POINTER (TRUE));
 	g_autofree char *password = state->callback (name, state->data);
+	if (proxy)
+		g_object_set_data (proxy, PPS_DOCUMENT_PASSWORD_PENDING, NULL);
 	pps_dbus_signature_passwords_complete_request_password (interface, invocation, password != NULL, password ? password : "");
 	return TRUE;
 }
@@ -58,6 +66,7 @@ set_password_callback (PpsDocumentSignatures *document, PpsSignaturePasswordCall
 	g_object_set_data_full (G_OBJECT (interface), password_key, state, free_callback);
 	g_signal_connect (interface, "handle-request-password", G_CALLBACK (request_password), state);
 	PpsDocumentSession *session = _pps_document_proxy_get_session (PPS_DOCUMENT (document));
+	g_weak_ref_init (&state->proxy, session->proxy);
 	if (g_dbus_interface_skeleton_export (G_DBUS_INTERFACE_SKELETON (interface), session->connection, PPS_SIGNATURE_PASSWORD_PATH, NULL))
 		g_object_set_data_full (G_OBJECT (document), password_key, g_steal_pointer (&interface), unexport_passwords);
 }
@@ -89,8 +98,15 @@ call_with_passwords (PpsDocumentSignatures *document, const char *method, GVaria
 	g_autoptr (PpsDBusSignaturePasswords) passwords = g_object_dup_data (G_OBJECT (document), password_key, ref_passwords, NULL);
 	PasswordCallback *state = passwords ? g_object_get_data (G_OBJECT (passwords), password_key) : NULL;
 	GDBusProxy *proxy = G_DBUS_PROXY (_pps_document_proxy_get_session (PPS_DOCUMENT (document))->proxy);
+	if (g_object_get_data (G_OBJECT (proxy), PPS_DOCUMENT_PASSWORD_PENDING)) {
+		if (parameters) {
+			g_variant_ref_sink (parameters);
+			g_variant_unref (parameters);
+		}
+		return NULL;
+	}
 	if (!state || state->thread != g_thread_self ())
-		return g_dbus_proxy_call_sync (proxy, method, parameters, G_DBUS_CALL_FLAGS_NONE, -1, NULL, NULL);
+		return _pps_document_call_sync (proxy, method, parameters, G_DBUS_CALL_FLAGS_NONE, -1, NULL, NULL);
 	/* Synchronous certificate access must still dispatch the password prompt
 	 * on the thread and context where its UI callback was registered. */
 	g_autoptr (GMainLoop) loop = g_main_loop_new (state->context, FALSE);

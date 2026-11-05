@@ -8,6 +8,7 @@
 static double
 get_duration (PpsDocumentTransition *document, int page)
 {
+	g_autoptr (PpsDocumentTransition) hold = g_object_ref (document);
 	double duration = -1;
 	if (!pps_dbus_document_call_get_page_duration_sync (
 		_pps_document_proxy_get_session (PPS_DOCUMENT (document))->proxy, page,
@@ -20,6 +21,7 @@ get_duration (PpsDocumentTransition *document, int page)
 static PpsTransitionEffect *
 get_effect (PpsDocumentTransition *document, int page)
 {
+	g_autoptr (PpsDocumentTransition) hold = g_object_ref (document);
 	g_autoptr (GVariant) value = NULL;
 	g_autoptr (GError) error = NULL;
 	if (!pps_dbus_document_call_get_transition_effect_sync (

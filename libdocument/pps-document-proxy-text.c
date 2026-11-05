@@ -14,6 +14,7 @@ get_proxy (gpointer document)
 static char *
 get_text (PpsDocumentText *document, PpsPage *page)
 {
+	g_autoptr (PpsDocumentText) hold = g_object_ref (document);
 	g_autofree char *text = NULL;
 	gboolean present;
 	if (!pps_dbus_document_call_get_text_sync (get_proxy (document), page->index,
@@ -25,6 +26,7 @@ get_text (PpsDocumentText *document, PpsPage *page)
 static gboolean
 get_text_layout (PpsDocumentText *document, PpsPage *page, PpsRectangle **areas, guint *n_areas)
 {
+	g_autoptr (PpsDocumentText) hold = g_object_ref (document);
 	g_autoptr (GVariant) rectangles = NULL;
 	g_autoptr (GError) error = NULL;
 	g_autofree PpsRectangle *result = NULL;
@@ -46,6 +48,7 @@ get_text_layout (PpsDocumentText *document, PpsPage *page, PpsRectangle **areas,
 static cairo_region_t *
 get_text_mapping (PpsDocumentText *document, PpsPage *page)
 {
+	g_autoptr (PpsDocumentText) hold = g_object_ref (document);
 	g_autoptr (GVariant) region = NULL;
 	g_autoptr (GError) error = NULL;
 	gboolean present;
@@ -60,6 +63,7 @@ get_text_mapping (PpsDocumentText *document, PpsPage *page)
 static PangoAttrList *
 get_text_attrs (PpsDocumentText *document, PpsPage *page)
 {
+	g_autoptr (PpsDocumentText) hold = g_object_ref (document);
 	g_autofree char *attributes = NULL;
 	gboolean present;
 	if (!pps_dbus_document_call_get_text_attrs_sync (
@@ -73,6 +77,7 @@ get_text_attrs (PpsDocumentText *document, PpsPage *page)
 static char *
 get_text_in_area (PpsDocumentText *document, PpsPage *page, PpsRectangle *area)
 {
+	g_autoptr (PpsDocumentText) hold = g_object_ref (document);
 	g_autofree char *text = NULL;
 	gboolean present;
 	if (!pps_dbus_document_call_get_text_in_area_sync (
@@ -86,6 +91,7 @@ get_text_in_area (PpsDocumentText *document, PpsPage *page, PpsRectangle *area)
 static GList *
 find_text (PpsDocumentFind *document, PpsPage *page, const char *text, PpsFindOptions options)
 {
+	g_autoptr (PpsDocumentFind) hold = g_object_ref (document);
 	g_autoptr (GVariant) matches = NULL;
 	GList *result = NULL;
 	if (!pps_dbus_document_call_find_text_sync (

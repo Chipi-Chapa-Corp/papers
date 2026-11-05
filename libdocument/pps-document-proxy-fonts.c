@@ -13,12 +13,14 @@ get_proxy (PpsDocumentFonts *document)
 static void
 scan (PpsDocumentFonts *document)
 {
+	g_autoptr (PpsDocumentFonts) hold = g_object_ref (document);
 	pps_dbus_document_call_scan_fonts_sync (get_proxy (document), G_DBUS_CALL_FLAGS_NONE, -1, NULL, NULL);
 }
 
 static GListModel *
 get_model (PpsDocumentFonts *document)
 {
+	g_autoptr (PpsDocumentFonts) hold = g_object_ref (document);
 	g_autoptr (GVariant) fonts = NULL;
 	g_autoptr (GError) error = NULL;
 	gboolean present;
@@ -39,6 +41,7 @@ get_model (PpsDocumentFonts *document)
 static const char *
 get_summary (PpsDocumentFonts *document)
 {
+	g_autoptr (PpsDocumentFonts) hold = g_object_ref (document);
 	g_autofree char *summary = NULL;
 	gboolean present;
 	if (!pps_dbus_document_call_get_fonts_summary_sync (get_proxy (document), G_DBUS_CALL_FLAGS_NONE, -1, &present, &summary, NULL, NULL) || !present)

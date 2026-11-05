@@ -163,10 +163,26 @@ document_dbus = gnome.gdbus_codegen(
   ],
 )
 
+# Route the generated synchronous client calls through the same UI/cancellation
+# adapter, preserving the generated method signatures and FD handling.
+document_dbus_client = static_library(
+  'pps-document-dbus-client',
+  document_dbus,
+  include_directories: top_inc,
+  dependencies: libdocument_deps,
+  c_args: cflags + [
+    '-Dg_dbus_proxy_call_sync=_pps_document_call_sync',
+    '-Dg_dbus_proxy_call_with_unix_fd_list_sync=_pps_document_call_with_fds_sync',
+  ],
+  pic: true,
+  gnu_symbol_visibility: 'hidden',
+)
+
 libppsdocument = shared_library(
   'ppsdocument-' + pps_api_version,
   version: pps_document_version,
-  sources: sources + enum_sources + [version_header] + document_dbus + [
+  sources: sources + enum_sources + [version_header, document_dbus[1]] + [
+    'pps-document-call.c',
     'pps-document-session.c',
     'pps-document-buffer.c',
     'pps-document-info-variant.c',
@@ -197,6 +213,7 @@ libppsdocument = shared_library(
   ],
   include_directories: top_inc,
   dependencies: libdocument_deps,
+  link_whole: document_dbus_client,
   c_args: cflags,
   install: true,
   gnu_symbol_visibility: 'hidden',

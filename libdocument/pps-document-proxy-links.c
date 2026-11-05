@@ -29,6 +29,7 @@ has_document_links (PpsDocumentLinks *document)
 static GListModel *
 get_links_model (PpsDocumentLinks *document)
 {
+	g_autoptr (PpsDocumentLinks) hold = g_object_ref (document);
 	g_autoptr (GVariant) rows = NULL;
 	g_autoptr (GError) error = NULL;
 	gboolean present;
@@ -48,6 +49,7 @@ decode_link (GVariant *value, gpointer data, GError **error)
 static PpsMappingList *
 get_links (PpsDocumentLinks *document, PpsPage *page)
 {
+	g_autoptr (PpsDocumentLinks) hold = g_object_ref (document);
 	g_autoptr (GVariant) mappings = NULL;
 	g_autoptr (GError) error = NULL;
 	gboolean present;
@@ -62,6 +64,7 @@ get_links (PpsDocumentLinks *document, PpsPage *page)
 static PpsLinkDest *
 find_link_dest (PpsDocumentLinks *document, const char *name)
 {
+	g_autoptr (PpsDocumentLinks) hold = g_object_ref (document);
 	g_autoptr (GVariant) destination = NULL;
 	g_autoptr (GError) error = NULL;
 	if (!pps_dbus_document_call_find_link_dest_sync (get_proxy (document), name,
@@ -73,6 +76,7 @@ find_link_dest (PpsDocumentLinks *document, const char *name)
 static int
 find_link_page (PpsDocumentLinks *document, const char *name)
 {
+	g_autoptr (PpsDocumentLinks) hold = g_object_ref (document);
 	int page = -1;
 	pps_dbus_document_call_find_link_page_sync (get_proxy (document), name,
 	                                            G_DBUS_CALL_FLAGS_NONE, -1, &page, NULL, NULL);
@@ -88,6 +92,7 @@ has_layers (PpsDocumentLayers *document)
 static GListModel *
 get_layers (PpsDocumentLayers *document)
 {
+	g_autoptr (PpsDocumentLayers) hold = g_object_ref (document);
 	GListModel *cached = g_object_get_data (G_OBJECT (document), "pps-proxy-layers");
 	g_autoptr (GVariant) rows = NULL;
 	g_autoptr (GError) error = NULL;
@@ -107,6 +112,7 @@ get_layers (PpsDocumentLayers *document)
 static void
 set_layer_visibility (PpsDocumentLayers *document, PpsLayer *layer, gboolean visible)
 {
+	g_autoptr (PpsDocumentLayers) hold = g_object_ref (document);
 	guint64 id = _pps_document_objects_get_id (_pps_document_proxy_get_objects (PPS_DOCUMENT (document)), G_OBJECT (layer));
 	pps_dbus_document_call_set_layer_visibility_sync (get_proxy (document), id, visible,
 	                                                  G_DBUS_CALL_FLAGS_NONE, -1, NULL, NULL);
@@ -127,6 +133,7 @@ hide_layer (PpsDocumentLayers *document, PpsLayer *layer)
 static gboolean
 layer_is_visible (PpsDocumentLayers *document, PpsLayer *layer)
 {
+	g_autoptr (PpsDocumentLayers) hold = g_object_ref (document);
 	gboolean visible = FALSE;
 	guint64 id = _pps_document_objects_get_id (_pps_document_proxy_get_objects (PPS_DOCUMENT (document)), G_OBJECT (layer));
 	pps_dbus_document_call_get_layer_visibility_sync (get_proxy (document), id,

@@ -165,9 +165,12 @@ void
 pps_job_run (PpsJob *job)
 {
 	PpsJobClass *class = PPS_JOB_GET_CLASS (job);
+	PpsJobPrivate *priv = GET_PRIVATE (job);
 
 	PPS_PROFILER_START (PPS_GET_TYPE_NAME (job), g_strdup ("running"));
+	g_cancellable_push_current (priv->cancellable);
 	class->run (job);
+	g_cancellable_pop_current (priv->cancellable);
 	PPS_PROFILER_STOP ();
 }
 

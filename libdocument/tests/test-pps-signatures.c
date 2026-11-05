@@ -9,6 +9,7 @@
 #include "pps-document-session-private.h"
 #include "pps-document-signature-private.h"
 #include "pps-document-signatures.h"
+#include "pps-document-text.h"
 #include "pps-init.h"
 
 static char *fixture_dir;
@@ -525,6 +526,7 @@ typedef struct {
 	gboolean reject;
 	gboolean wrong_once;
 	GCancellable *cancel;
+	PpsDocument *reenter;
 } ProxyPassword;
 
 static char *
@@ -534,6 +536,12 @@ proxy_password (const char *name, gpointer data)
 	g_assert_true (g_thread_self () == state->thread);
 	g_assert_nonnull (name);
 	state->requests++;
+	if (state->reenter) {
+		g_autoptr (PpsPage) page = pps_document_get_page (state->reenter, 0);
+		g_autofree char *text = pps_document_text_get_text (PPS_DOCUMENT_TEXT (state->reenter), page);
+		g_assert_null (text);
+		g_assert_null (pps_document_signatures_get_available_signing_certificates (PPS_DOCUMENT_SIGNATURES (state->reenter)));
+	}
 	if (state->cancel)
 		g_cancellable_cancel (state->cancel);
 	if (state->wrong_once && state->requests == 1)
@@ -643,7 +651,7 @@ proxy_certificate_callbacks (void)
 	g_assert_null (pps_document_signatures_get_available_signing_certificates (PPS_DOCUMENT_SIGNATURES (document)));
 	g_assert_cmpuint (denied.requests, >, 0);
 	guint previous = denied.requests;
-	ProxyPassword accepted = { .thread = g_thread_self (), .wrong_once = TRUE };
+	ProxyPassword accepted = { .thread = g_thread_self (), .wrong_once = TRUE, .reenter = document };
 	pps_document_signatures_set_password_callback (PPS_DOCUMENT_SIGNATURES (document), proxy_password, &accepted);
 	g_autolist (PpsCertificateInfo) first_attempt = pps_document_signatures_get_available_signing_certificates (PPS_DOCUMENT_SIGNATURES (document));
 	g_autoptr (PpsCertificateInfo) certificate = proxy_certificate (document, &accepted);

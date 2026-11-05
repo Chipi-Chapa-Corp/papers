@@ -19,6 +19,7 @@ rectangle_value (PpsRectangle *points)
 static char *
 get_selected_text (PpsSelection *document, PpsPage *page, PpsSelectionStyle style, PpsRectangle *points)
 {
+	g_autoptr (PpsSelection) hold = g_object_ref (document);
 	g_autofree char *text = NULL;
 	gboolean present;
 	if (!pps_dbus_document_call_get_selected_text_sync (
@@ -31,6 +32,7 @@ get_selected_text (PpsSelection *document, PpsPage *page, PpsSelectionStyle styl
 static cairo_region_t *
 get_selection_region (PpsSelection *document, PpsRenderContext *context, PpsSelectionStyle style, PpsRectangle *points)
 {
+	g_autoptr (PpsSelection) hold = g_object_ref (document);
 	g_autoptr (GVariant) region = NULL;
 	g_autoptr (GError) error = NULL;
 	gboolean present;
@@ -46,6 +48,7 @@ get_selection_region (PpsSelection *document, PpsRenderContext *context, PpsSele
 static void
 render_selection (PpsSelection *document, PpsRenderContext *context, cairo_surface_t **surface, PpsRectangle *points, PpsRectangle *old_points, PpsSelectionStyle style, GdkRGBA *text, GdkRGBA *base)
 {
+	g_autoptr (PpsSelection) hold = g_object_ref (document);
 	g_autoptr (GVariant) buffer = NULL;
 	g_autoptr (GUnixFDList) descriptors = NULL;
 	g_autoptr (GError) error = NULL;

@@ -23,6 +23,7 @@ is_active (PpsFileExporter *exporter)
 static void
 end_export (PpsFileExporter *exporter)
 {
+	g_autoptr (PpsFileExporter) hold = g_object_ref (exporter);
 	if (!is_active (exporter))
 		return;
 	g_autoptr (GError) error = NULL;
@@ -34,6 +35,7 @@ end_export (PpsFileExporter *exporter)
 static void
 begin_export (PpsFileExporter *exporter, PpsFileExporterContext *context)
 {
+	g_autoptr (PpsFileExporter) hold = g_object_ref (exporter);
 	end_export (exporter);
 	_pps_file_exporter_take_error (exporter, NULL);
 	if (!context->filename) {
@@ -66,6 +68,7 @@ begin_export (PpsFileExporter *exporter, PpsFileExporterContext *context)
 static void
 begin_page (PpsFileExporter *exporter)
 {
+	g_autoptr (PpsFileExporter) hold = g_object_ref (exporter);
 	g_autoptr (GError) error = NULL;
 	if (is_active (exporter) && !_pps_file_exporter_get_error (exporter, NULL) &&
 	    !pps_dbus_document_call_export_begin_page_sync (get_proxy (exporter), G_DBUS_CALL_FLAGS_NONE, -1, NULL, &error))
@@ -75,6 +78,7 @@ begin_page (PpsFileExporter *exporter)
 static void
 do_page (PpsFileExporter *exporter, PpsRenderContext *context)
 {
+	g_autoptr (PpsFileExporter) hold = g_object_ref (exporter);
 	g_autoptr (GError) error = NULL;
 	if (is_active (exporter) && !_pps_file_exporter_get_error (exporter, NULL) &&
 	    !pps_dbus_document_call_export_page_sync (get_proxy (exporter), context->page->index, context->rotation, context->scale,
@@ -86,6 +90,7 @@ do_page (PpsFileExporter *exporter, PpsRenderContext *context)
 static void
 end_page (PpsFileExporter *exporter)
 {
+	g_autoptr (PpsFileExporter) hold = g_object_ref (exporter);
 	g_autoptr (GError) error = NULL;
 	if (is_active (exporter) && !_pps_file_exporter_get_error (exporter, NULL) &&
 	    !pps_dbus_document_call_export_end_page_sync (get_proxy (exporter), G_DBUS_CALL_FLAGS_NONE, -1, NULL, &error))

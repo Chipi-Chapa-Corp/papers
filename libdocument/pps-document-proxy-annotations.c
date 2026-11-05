@@ -7,6 +7,7 @@
 static void
 annotation_changed (PpsAnnotation *annotation, GParamSpec *spec, PpsDocument *document)
 {
+	g_autoptr (PpsDocument) hold = g_object_ref (document);
 	if ((spec->flags & G_PARAM_READWRITE) != G_PARAM_READWRITE || (spec->flags & G_PARAM_CONSTRUCT_ONLY))
 		return;
 	g_autoptr (GError) error = NULL;
@@ -36,6 +37,7 @@ bind_annotation (PpsDocument *document, PpsAnnotation *annotation, guint64 id)
 static GList *
 get_annotations (PpsDocumentAnnotations *annotations, PpsPage *page)
 {
+	g_autoptr (PpsDocumentAnnotations) hold = g_object_ref (annotations);
 	PpsDocument *document = PPS_DOCUMENT (annotations);
 	g_autolist (PpsAnnotation) list = NULL;
 	g_autoptr (GVariant) handles = NULL;
@@ -84,6 +86,7 @@ is_modified (PpsDocumentAnnotations *annotations)
 static void
 add_annotation (PpsDocumentAnnotations *annotations, PpsAnnotation *annotation)
 {
+	g_autoptr (PpsDocumentAnnotations) hold = g_object_ref (annotations);
 	PpsDocument *document = PPS_DOCUMENT (annotations);
 	PpsDocumentObjects *objects = _pps_document_proxy_get_objects (document);
 	guint64 id = _pps_document_objects_get_id (objects, G_OBJECT (annotation));
@@ -117,6 +120,7 @@ add_annotation (PpsDocumentAnnotations *annotations, PpsAnnotation *annotation)
 static void
 remove_annotation (PpsDocumentAnnotations *annotations, PpsAnnotation *annotation)
 {
+	g_autoptr (PpsDocumentAnnotations) hold = g_object_ref (annotations);
 	PpsDocument *document = PPS_DOCUMENT (annotations);
 	guint64 id = _pps_document_objects_get_id (_pps_document_proxy_get_objects (document), G_OBJECT (annotation));
 	guint state;
@@ -130,6 +134,7 @@ remove_annotation (PpsDocumentAnnotations *annotations, PpsAnnotation *annotatio
 static PpsAnnotationsOverMarkup
 over_markup (PpsDocumentAnnotations *annotations, PpsAnnotation *annotation, double x, double y)
 {
+	g_autoptr (PpsDocumentAnnotations) hold = g_object_ref (annotations);
 	PpsDocument *document = PPS_DOCUMENT (annotations);
 	guint64 id = _pps_document_objects_get_id (_pps_document_proxy_get_objects (document), G_OBJECT (annotation));
 	guint result = PPS_ANNOTATION_OVER_MARKUP_UNKNOWN;

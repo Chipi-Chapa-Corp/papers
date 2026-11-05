@@ -17,6 +17,7 @@ typedef struct {
 static GFile *
 download_file (PpsDocument *document, guint64 id, GError **error)
 {
+	g_autoptr (PpsDocument) hold = g_object_ref (document);
 	g_autoptr (GUnixFDList) descriptors = NULL;
 	g_autoptr (GVariant) buffer = NULL;
 	guint64 size;
@@ -78,6 +79,7 @@ invalid:
 static PpsMappingList *
 get_mapping (PpsDocumentMedia *document, PpsPage *page)
 {
+	g_autoptr (PpsDocumentMedia) hold = g_object_ref (document);
 	g_autoptr (GVariant) mappings = NULL;
 	g_autoptr (GError) error = NULL;
 	gboolean present;

@@ -74,6 +74,7 @@ _pps_document_proxy_set_state (PpsDocument *document, guint state)
 static gboolean
 read_info (PpsDocument *document, int n_pages, GError **error)
 {
+	g_autoptr (PpsDocument) hold = g_object_ref (document);
 	PpsDocumentProxyPrivate *priv = get_private (document);
 	g_autoptr (GVariant) metadata = NULL;
 	g_autoptr (GVariant) pages = NULL;
@@ -125,6 +126,7 @@ read_info (PpsDocument *document, int n_pages, GError **error)
 static gboolean
 load (PpsDocument *document, const char *uri, GError **error)
 {
+	g_autoptr (PpsDocument) hold = g_object_ref (document);
 	PpsDocumentProxyPrivate *priv = get_private (document);
 	int n_pages;
 
@@ -137,6 +139,7 @@ load (PpsDocument *document, const char *uri, GError **error)
 static gboolean
 load_fd (PpsDocument *document, int fd, GError **error)
 {
+	g_autoptr (PpsDocument) hold = g_object_ref (document);
 	PpsDocumentProxyPrivate *priv = get_private (document);
 	g_autoptr (GUnixFDList) descriptors = g_unix_fd_list_new ();
 	int handle = g_unix_fd_list_append (descriptors, fd, error);
@@ -155,6 +158,7 @@ load_fd (PpsDocument *document, int fd, GError **error)
 static gboolean
 save (PpsDocument *document, const char *uri, GError **error)
 {
+	g_autoptr (PpsDocument) hold = g_object_ref (document);
 	PpsDocumentProxyPrivate *priv = get_private (document);
 	guint state;
 	if (!pps_dbus_document_call_save_sync (priv->session->proxy, uri,
@@ -214,6 +218,7 @@ get_backend_info (PpsDocument *document, PpsDocumentBackendInfo *info)
 static cairo_surface_t *
 render_surface (PpsDocument *document, PpsRenderContext *context, gboolean thumbnail)
 {
+	g_autoptr (PpsDocument) hold = g_object_ref (document);
 	g_autoptr (GError) error = NULL;
 	return _pps_document_session_render (get_private (document)->session,
 	                                     context, thumbnail, NULL, &error);

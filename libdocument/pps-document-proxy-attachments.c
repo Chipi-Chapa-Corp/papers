@@ -16,6 +16,7 @@ has_attachments (PpsDocumentAttachments *document)
 static GList *
 get_attachments (PpsDocumentAttachments *document)
 {
+	g_autoptr (PpsDocumentAttachments) hold = g_object_ref (document);
 	PpsDocumentSession *session = _pps_document_proxy_get_session (PPS_DOCUMENT (document));
 	g_autolist (PpsAttachment) attachments = NULL;
 	guint offset = 0;

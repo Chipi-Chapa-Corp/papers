@@ -100,12 +100,142 @@ independent_documents (void)
 	pps_job_scheduler_update_job (blocked, PPS_JOB_PRIORITY_URGENT);
 }
 
+typedef struct {
+	GSubprocess *process;
+	GMutex mutex;
+	GCond condition;
+	gboolean finished, expired;
+} WorkerGuard;
+
+static gpointer
+release_stopped_worker (gpointer data)
+{
+	WorkerGuard *guard = data;
+	g_mutex_lock (&guard->mutex);
+	gint64 deadline = g_get_monotonic_time () + 2 * G_TIME_SPAN_SECOND;
+	while (!guard->finished && g_cond_wait_until (&guard->condition, &guard->mutex, deadline)) {
+	}
+	guard->expired = !guard->finished;
+	if (guard->expired)
+		g_subprocess_send_signal (guard->process, SIGCONT);
+	g_mutex_unlock (&guard->mutex);
+	return NULL;
+}
+
+static void
+finish_guard (WorkerGuard *guard, GThread *thread)
+{
+	g_mutex_lock (&guard->mutex);
+	guard->finished = TRUE;
+	g_cond_signal (&guard->condition);
+	g_mutex_unlock (&guard->mutex);
+	g_thread_join (thread);
+	g_mutex_clear (&guard->mutex);
+	g_cond_clear (&guard->condition);
+}
+
+static void
+stop_worker (GSubprocess *process)
+{
+	pid_t pid = g_ascii_strtoll (g_subprocess_get_identifier (process), NULL, 10);
+	siginfo_t status;
+	g_subprocess_send_signal (process, SIGSTOP);
+	g_assert_cmpint (waitid (P_PID, pid, &status, WSTOPPED | WNOWAIT), ==, 0);
+}
+
+static void
+cancel_running_job (void)
+{
+	g_autofree char *uri = g_filename_to_uri (TESTDATADIR "/utf16le-annot.pdf", NULL, NULL);
+	g_autoptr (PpsDocument) document = open_document (uri);
+	PpsDocumentSession *session = _pps_document_proxy_get_session (document);
+	stop_worker (session->process);
+	gint requests = 0;
+	guint filter = g_dbus_connection_add_filter (session->connection, count_requests, &requests, NULL);
+	g_autoptr (PpsJob) job = pps_job_annots_new (document);
+	pps_job_scheduler_push_job (job, PPS_JOB_PRIORITY_NONE);
+	gint64 deadline = g_get_monotonic_time () + 2 * G_TIME_SPAN_SECOND;
+	while (!g_atomic_int_get (&requests) && g_get_monotonic_time () < deadline)
+		iterate ();
+	WorkerGuard guard = { .process = session->process };
+	GThread *thread = g_thread_new ("worker-guard", release_stopped_worker, &guard);
+	pps_job_cancel (job);
+	pps_job_scheduler_wait ();
+	finish_guard (&guard, thread);
+	g_subprocess_send_signal (session->process, SIGCONT);
+	g_dbus_connection_remove_filter (session->connection, filter);
+	g_assert_cmpint (g_atomic_int_get (&requests), ==, 1);
+	g_assert_false (guard.expired);
+	g_autoptr (PpsPage) page = pps_document_get_page (document, 0);
+	g_autolist (PpsAnnotation) annotations = pps_document_annotations_get_annotations (PPS_DOCUMENT_ANNOTATIONS (document), page);
+	g_assert_cmpuint (g_list_length (annotations), ==, 2);
+}
+
+typedef struct {
+	PpsDocument *document;
+	WorkerGuard *guard;
+	GMainLoop *loop;
+	guint progress_source;
+	gboolean progressed, responsive;
+} ForegroundCall;
+
+static gboolean
+foreground_progress (gpointer data)
+{
+	ForegroundCall *call = data;
+	call->progress_source = 0;
+	call->progressed = TRUE;
+	/* The caller's document reference may disappear in a reentered UI event. */
+	g_clear_object (&call->document);
+	g_subprocess_send_signal (call->guard->process, SIGCONT);
+	return G_SOURCE_REMOVE;
+}
+
+static gboolean
+foreground_call (gpointer data)
+{
+	ForegroundCall *call = data;
+	g_autoptr (PpsPage) page = pps_document_get_page (call->document, 0);
+	g_autolist (PpsAnnotation) annotations = pps_document_annotations_get_annotations (PPS_DOCUMENT_ANNOTATIONS (call->document), page);
+	g_assert_cmpuint (g_list_length (annotations), ==, 2);
+	call->responsive = call->progressed;
+	g_main_loop_quit (call->loop);
+	return G_SOURCE_REMOVE;
+}
+
+static void
+foreground_responsiveness (void)
+{
+	g_autofree char *uri = g_filename_to_uri (TESTDATADIR "/utf16le-annot.pdf", NULL, NULL);
+	PpsDocument *document = open_document (uri);
+	g_autoptr (GSubprocess) process = g_object_ref (_pps_document_proxy_get_session (document)->process);
+	stop_worker (process);
+	WorkerGuard guard = { .process = process };
+	GThread *thread = g_thread_new ("worker-guard", release_stopped_worker, &guard);
+	g_autoptr (GMainLoop) loop = g_main_loop_new (NULL, FALSE);
+	ForegroundCall call = { .document = document, .guard = &guard, .loop = loop };
+	PpsDocument *remaining = document;
+	g_object_add_weak_pointer (G_OBJECT (document), (gpointer *) &remaining);
+	g_idle_add (foreground_call, &call);
+	call.progress_source = g_idle_add (foreground_progress, &call);
+	g_main_loop_run (loop);
+	finish_guard (&guard, thread);
+	if (call.progress_source)
+		g_source_remove (call.progress_source);
+	g_clear_object (&call.document);
+	g_assert_false (guard.expired);
+	g_assert_true (call.responsive);
+	g_assert_null (remaining);
+}
+
 int
 main (int argc, char **argv)
 {
 	g_test_init (&argc, &argv, NULL);
 	g_assert_true (pps_init ());
 	g_test_add_func ("/job-scheduler/independent-documents", independent_documents);
+	g_test_add_func ("/job-scheduler/cancel-running-job", cancel_running_job);
+	g_test_add_func ("/job-scheduler/foreground-responsiveness", foreground_responsiveness);
 	int result = g_test_run ();
 	pps_shutdown ();
 	return result;

@@ -36,6 +36,7 @@ invalid:
 static PpsMappingList *
 get_mapping (PpsDocumentImages *document, PpsPage *page)
 {
+	g_autoptr (PpsDocumentImages) hold = g_object_ref (document);
 	g_autoptr (GVariant) mappings = NULL;
 	g_autoptr (GError) error = NULL;
 	gboolean present;
@@ -50,6 +51,7 @@ get_mapping (PpsDocumentImages *document, PpsPage *page)
 static GdkPixbuf *
 get_image (PpsDocumentImages *document, PpsImage *image)
 {
+	g_autoptr (PpsDocumentImages) hold = g_object_ref (document);
 	guint64 id = _pps_document_objects_get_id (_pps_document_proxy_get_objects (PPS_DOCUMENT (document)), G_OBJECT (image));
 	g_autoptr (GVariant) buffer = NULL;
 	g_autoptr (GUnixFDList) descriptors = NULL;

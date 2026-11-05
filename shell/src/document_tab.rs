@@ -73,6 +73,7 @@ mod imp {
         pub(super) metadata: RefCell<Option<papers_view::Metadata>>,
 
         pub(super) dest: RefCell<Option<papers_document::LinkDest>>,
+        pub(super) requested_mode: Cell<Option<WindowRunMode>>,
 
         pub(super) monitor: RefCell<Option<PpsFileMonitor>>,
 
@@ -201,6 +202,7 @@ mod imp {
             self.file.take();
             self.metadata.take();
             self.dest.take();
+            self.requested_mode.take();
             self.display_name.borrow_mut().clear();
             self.obj().notify_display_name();
             self.obj().notify_title();
@@ -389,6 +391,19 @@ mod imp {
                     .unwrap()
                     .set_enabled(true);
                 window.unfullscreen();
+            }
+        }
+
+        pub(super) fn set_run_mode(&self, mode: WindowRunMode) {
+            match mode {
+                WindowRunMode::Presentation => self.run_presentation(),
+                WindowRunMode::Fullscreen => {
+                    if let Some(window) = self.window() {
+                        window.change_action_state("fullscreen", &true.into());
+                    }
+                    self.set_mode(mode);
+                }
+                _ => self.set_mode(mode),
             }
         }
 
@@ -761,6 +776,7 @@ mod imp {
             self.clear_local_uri();
 
             self.dest.replace(dest.cloned());
+            self.requested_mode.set(mode);
 
             // Create a monitor for the document
             let monitor = PpsFileMonitor::new(&file.uri());
@@ -795,13 +811,9 @@ mod imp {
             let load_job = papers_view::JobLoad::new();
             load_job.set_uri(uri);
 
-            let dest = dest.cloned();
-
             let id = load_job.connect_finished(glib::clone!(
                 #[weak(rename_to = obj)]
                 self,
-                #[strong]
-                mode,
                 move |job| {
                     let uri = obj.obj().uri().unwrap();
 
@@ -818,9 +830,10 @@ mod imp {
                                 pending_mode = WindowRunMode::Presentation;
                             }
 
-                            if let Some(m) = mode {
-                                pending_mode = m;
+                            if let Some(mode) = obj.requested_mode.take() {
+                                pending_mode = mode;
                             }
+                            let dest = obj.dest.take();
 
                             obj.document_view.open_document(
                                 &document,
@@ -832,19 +845,7 @@ mod imp {
                             obj.document_view
                                 .set_inverted_colors(obj.settings.boolean("night-mode"));
 
-                            match pending_mode {
-                                WindowRunMode::Presentation => obj.run_presentation(),
-                                WindowRunMode::Fullscreen => {
-                                    WidgetExt::activate_action(
-                                        obj.obj().as_ref(),
-                                        "win.fullscreen",
-                                        None,
-                                    )
-                                    .unwrap();
-                                    obj.set_mode(pending_mode);
-                                }
-                                _ => obj.set_mode(pending_mode),
-                            }
+                            obj.set_run_mode(pending_mode);
 
                             gtk::RecentManager::default().add_item(&uri);
 
@@ -1102,7 +1103,28 @@ impl PpsDocumentTab {
         self.imp().file.borrow().as_ref().map(|f| f.uri().into())
     }
     pub fn open(&self, file: &gio::File, dest: Option<&LinkDest>, mode: Option<WindowRunMode>) {
-        self.imp().open(file, dest, mode);
+        let imp = self.imp();
+        if self.uri().as_deref() == Some(file.uri().as_str()) {
+            if self.loading() {
+                if let Some(dest) = dest {
+                    imp.dest.replace(Some(dest.clone()));
+                }
+                if mode.is_some() {
+                    imp.requested_mode.set(mode);
+                }
+                return;
+            }
+            if self.document().is_some() {
+                if let Some(dest) = dest {
+                    imp.document_view.handle_link(dest);
+                }
+                if let Some(mode) = mode {
+                    imp.set_run_mode(mode);
+                }
+                return;
+            }
+        }
+        imp.open(file, dest, mode);
     }
     pub fn document(&self) -> Option<Document> {
         self.imp().document_view.model().document()
@@ -1135,12 +1157,12 @@ impl PpsDocumentTab {
         self.imp().cmd_escape();
     }
     pub fn focus_view(&self) {
-        if self.imp().mode.get() == WindowRunMode::Normal {
+        if matches!(
+            self.imp().mode.get(),
+            WindowRunMode::Normal | WindowRunMode::Fullscreen
+        ) {
             self.imp().document_view.focus_view();
         }
-    }
-    pub fn handle_link(&self, dest: &LinkDest) {
-        self.imp().document_view.handle_link(dest);
     }
     pub fn open_copy_from(&self, source: &Self, dest: Option<&LinkDest>) {
         self.imp().file.replace(source.imp().file.borrow().clone());

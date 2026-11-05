@@ -462,11 +462,7 @@ mod imp {
                 let tab = page.child().downcast::<PpsDocumentTab>().unwrap();
                 if tab.uri().as_deref() == Some(file.uri().as_str()) {
                     self.tabs.set_selected_page(&page);
-                    if tab.document().is_some()
-                        && let Some(dest) = dest
-                    {
-                        tab.handle_link(dest);
-                    }
+                    tab.open(file, dest, mode);
                     return;
                 }
             }

@@ -22,6 +22,38 @@ fn window_actions_follow_the_document_lifecycle() {
 }
 
 #[test]
+fn repeated_open_requests_keep_the_document_and_apply_the_requested_mode() {
+    crate::tests::run(|| {
+        let window = PpsWindow::new();
+        let file = fixture("utf16le-annot.pdf");
+        window.open(&file, None, None);
+        window.open(&file, None, Some(WindowRunMode::Fullscreen));
+        window.present();
+        wait_until("fullscreen document", || window.document().is_some());
+        assert!(
+            window
+                .action_state("fullscreen")
+                .unwrap()
+                .get::<bool>()
+                .unwrap()
+        );
+
+        let document = window.document();
+        window.open(&file, None, Some(WindowRunMode::Fullscreen));
+        assert_eq!(window.document(), document);
+        assert_eq!(window.imp().tabs.n_pages(), 1);
+        assert!(
+            window
+                .action_state("fullscreen")
+                .unwrap()
+                .get::<bool>()
+                .unwrap()
+        );
+        window.close();
+    });
+}
+
+#[test]
 fn tabs_reorder_transfer_and_close_through_their_current_window() {
     crate::tests::run(|| {
         let window = PpsWindow::new();

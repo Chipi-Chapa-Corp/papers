@@ -1250,6 +1250,109 @@ no_fonts (void)
 	g_assert_cmpint (g_unlink (path), ==, 0);
 }
 
+static void
+embedded_images (void)
+{
+	const char *content = "q 20 0 0 10 5 20 cm /Im1 Do Q q 20 0 0 10 40 20 cm /Im2 Do Q\n";
+	g_autofree char *stream = g_strdup_printf ("<< /Length %zu >>\nstream\n%sendstream", strlen (content), content);
+	const char *objects[] = {
+		"<< /Type /Catalog /Pages 2 0 R >>",
+		"<< /Type /Pages /Count 1 /Kids [3 0 R] >>",
+		"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 100 100] /Resources << /XObject << /Im1 5 0 R /Im2 6 0 R >> >> /Contents 4 0 R >>",
+		stream,
+		"<< /Type /XObject /Subtype /Image /Width 2 /Height 1 /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /ASCIIHexDecode /Length 13 >>\nstream\nFF00000000FF>\nendstream",
+		"<< /Type /XObject /Subtype /Image /Width 2 /Height 1 /ColorSpace /DeviceRGB /BitsPerComponent 8 /SMask 7 0 R /Filter /ASCIIHexDecode /Length 13 >>\nstream\n00FF00FFFFFF>\nendstream",
+		"<< /Type /XObject /Subtype /Image /Width 2 /Height 1 /ColorSpace /DeviceGray /BitsPerComponent 8 /Filter /ASCIIHexDecode /Length 5 >>\nstream\n80FF>\nendstream",
+	};
+	g_autofree char *path = write_pdf_fixture ("images.pdf", objects, G_N_ELEMENTS (objects));
+	g_autofree char *uri = g_filename_to_uri (path, NULL, NULL);
+	g_autoptr (PpsDocument) first = new_document ();
+	g_autoptr (PpsDocument) second = new_document ();
+	load_document (first, uri);
+	load_document (second, uri);
+	g_assert_true (PPS_IS_DOCUMENT_IMAGES (first));
+	PpsDocumentImages *images = PPS_DOCUMENT_IMAGES (first);
+	g_autoptr (PpsPage) page = pps_document_get_page (first, 0);
+	PpsMappingList *mappings = pps_document_images_get_image_mapping (images, page);
+	PpsMappingList *again = pps_document_images_get_image_mapping (images, page);
+	g_assert_cmpuint (pps_mapping_list_length (mappings), ==, 2);
+	g_assert_cmpuint (pps_mapping_list_length (again), ==, 2);
+	g_autoptr (GdkPixbuf) retained = NULL;
+	for (guint i = 0; i < pps_mapping_list_length (mappings); i++) {
+		PpsMapping *mapping = pps_mapping_list_nth (mappings, i);
+		PpsMapping *other = pps_mapping_list_nth (again, i);
+		g_assert_true (mapping->data != other->data);
+		g_assert_cmpuint (_pps_document_objects_get_id (_pps_document_proxy_get_objects (first), mapping->data), ==,
+		                  _pps_document_objects_get_id (_pps_document_proxy_get_objects (first), other->data));
+		g_assert_cmpint (pps_image_get_page (mapping->data), ==, 0);
+		g_assert_cmpint (pps_image_get_id (mapping->data), ==, pps_image_get_id (other->data));
+		g_assert_cmpfloat (mapping->area.x2 - mapping->area.x1, ==, 20);
+		g_assert_cmpfloat (mapping->area.y2 - mapping->area.y1, ==, 10);
+		g_autoptr (GdkPixbuf) pixels = pps_document_images_get_image (images, mapping->data);
+		g_assert_nonnull (pixels);
+		g_assert_cmpint (gdk_pixbuf_get_width (pixels), ==, 2);
+		g_assert_cmpint (gdk_pixbuf_get_height (pixels), ==, 1);
+		const guint8 *data = gdk_pixbuf_read_pixels (pixels);
+		if (mapping->area.x1 == 5) {
+			g_assert_cmpmem (data, 3, "\377\0\0", 3);
+			g_assert_cmpmem (data + gdk_pixbuf_get_n_channels (pixels), 3, "\0\0\377", 3);
+		} else {
+			g_assert_cmpfloat (mapping->area.x1, ==, 40);
+			g_assert_true (gdk_pixbuf_get_has_alpha (pixels));
+			g_assert_cmpmem (data, 8, "\0\377\0\200\377\377\377\377", 8);
+		}
+		gdk_pixbuf_get_pixels (pixels)[0] ^= 0xff;
+		g_autoptr (GdkPixbuf) unchanged = pps_document_images_get_image (images, other->data);
+		g_assert_nonnull (unchanged);
+		g_assert_cmpint (gdk_pixbuf_read_pixels (pixels)[0], !=, gdk_pixbuf_read_pixels (unchanged)[0]);
+		g_set_object (&retained, unchanged);
+		g_assert_null (pps_document_images_get_image (PPS_DOCUMENT_IMAGES (second), mapping->data));
+	}
+	g_autoptr (PpsImage) unbound = pps_image_new (0, 0);
+	g_assert_null (pps_document_images_get_image (images, unbound));
+	PpsDocumentSession *session = _pps_document_proxy_get_session (first);
+	g_autoptr (GError) error = NULL;
+	g_assert_false (pps_dbus_document_call_get_image_sync (session->proxy, G_MAXUINT64,
+	                                                       G_DBUS_CALL_FLAGS_NONE, 5000, NULL, NULL, NULL, NULL, NULL, &error));
+	g_assert_error (error, G_IO_ERROR, G_IO_ERROR_INVALID_ARGUMENT);
+	g_clear_error (&error);
+	for (int index = -1; index <= 1; index += 2) {
+		g_assert_false (pps_dbus_document_call_get_image_mapping_sync (session->proxy, index,
+		                                                               G_DBUS_CALL_FLAGS_NONE, 5000, NULL, NULL, NULL, &error));
+		g_assert_error (error, G_IO_ERROR, G_IO_ERROR_INVALID_ARGUMENT);
+		g_clear_error (&error);
+	}
+	render_page (first, 0);
+	g_clear_object (&first);
+	g_autofree char *saved = g_build_filename (fixture_dir, "image.png", NULL);
+	g_assert_true (gdk_pixbuf_save (retained, saved, "png", &error, NULL));
+	g_assert_no_error (error);
+	g_autoptr (GdkPixbuf) reopened = gdk_pixbuf_new_from_file (saved, &error);
+	g_assert_no_error (error);
+	g_assert_cmpmem (gdk_pixbuf_read_pixels (reopened), gdk_pixbuf_get_byte_length (reopened),
+	                 gdk_pixbuf_read_pixels (retained), gdk_pixbuf_get_byte_length (retained));
+	PpsMappingList *independent = pps_document_images_get_image_mapping (PPS_DOCUMENT_IMAGES (second), page);
+	g_autoptr (GdkPixbuf) valid = pps_document_images_get_image (PPS_DOCUMENT_IMAGES (second), pps_mapping_list_nth (independent, 0)->data);
+	g_assert_nonnull (valid);
+	pps_mapping_list_unref (independent);
+	pps_mapping_list_unref (again);
+	pps_mapping_list_unref (mappings);
+	g_assert_cmpint (g_unlink (path), ==, 0);
+	g_assert_cmpint (g_unlink (saved), ==, 0);
+}
+
+static void
+no_images (void)
+{
+	g_autoptr (PpsDocument) document = new_document ();
+	load_document (document, fixture_uri);
+	g_autoptr (PpsPage) page = pps_document_get_page (document, 0);
+	PpsMappingList *mappings = pps_document_images_get_image_mapping (PPS_DOCUMENT_IMAGES (document), page);
+	g_assert_nonnull (mappings);
+	g_assert_cmpuint (pps_mapping_list_length (mappings), ==, 0);
+	pps_mapping_list_unref (mappings);
+}
+
 int
 main (int argc, char **argv)
 {
@@ -1274,6 +1377,8 @@ main (int argc, char **argv)
 	g_test_add_func ("/document-proxy/annotation-attachment-batches", annotation_attachment_batches);
 	g_test_add_func ("/document-proxy/font-information", font_information);
 	g_test_add_func ("/document-proxy/no-fonts", no_fonts);
+	g_test_add_func ("/document-proxy/embedded-images", embedded_images);
+	g_test_add_func ("/document-proxy/no-images", no_images);
 	int result = g_test_run ();
 	g_unlink (fixture_path);
 	g_rmdir (fixture_dir);

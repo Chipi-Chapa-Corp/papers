@@ -7,6 +7,7 @@
 #include "pps-document-find.h"
 #include "pps-document-fonts.h"
 #include "pps-document-forms.h"
+#include "pps-document-images.h"
 #include "pps-document-layers.h"
 #include "pps-document-links.h"
 #include "pps-document-objects-private.h"
@@ -51,3 +52,4 @@ void _pps_document_proxy_forms_iface_init (PpsDocumentFormsInterface *iface);
 void _pps_document_proxy_attachments_iface_init (PpsDocumentAttachmentsInterface *iface);
 void _pps_document_proxy_annotations_iface_init (PpsDocumentAnnotationsInterface *iface, gpointer data);
 void _pps_document_proxy_fonts_iface_init (PpsDocumentFontsInterface *iface);
+void _pps_document_proxy_images_iface_init (PpsDocumentImagesInterface *iface);

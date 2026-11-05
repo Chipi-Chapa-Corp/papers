@@ -7,7 +7,27 @@ struct _PpsDocumentObjects {
 	GHashTable *by_object;
 	guint64 next_id;
 	GRecMutex mutex;
+	GObject *scope;
 };
+
+typedef struct {
+	GObject *scope;
+	guint64 id;
+} ObjectHandle;
+
+static GQuark
+handle_quark (void)
+{
+	return g_quark_from_static_string ("pps-document-object-handle");
+}
+
+static void
+free_handle (gpointer data)
+{
+	ObjectHandle *handle = data;
+	g_object_unref (handle->scope);
+	g_free (handle);
+}
 
 PpsDocumentObjects *
 _pps_document_objects_new (void)
@@ -16,6 +36,7 @@ _pps_document_objects_new (void)
 	objects->by_id = g_hash_table_new_full (g_int64_hash, g_int64_equal, g_free, g_object_unref);
 	objects->by_object = g_hash_table_new (g_direct_hash, g_direct_equal);
 	objects->next_id = 1;
+	objects->scope = g_object_new (G_TYPE_OBJECT, NULL);
 	g_rec_mutex_init (&objects->mutex);
 	return objects;
 }
@@ -25,6 +46,7 @@ _pps_document_objects_free (PpsDocumentObjects *objects)
 {
 	g_hash_table_unref (objects->by_object);
 	g_hash_table_unref (objects->by_id);
+	g_object_unref (objects->scope);
 	g_rec_mutex_clear (&objects->mutex);
 	g_free (objects);
 }
@@ -32,9 +54,34 @@ _pps_document_objects_free (PpsDocumentObjects *objects)
 guint64
 _pps_document_objects_get_id (PpsDocumentObjects *objects, GObject *object)
 {
+	if (!object)
+		return 0;
 	g_autoptr (GRecMutexLocker) locker = g_rec_mutex_locker_new (&objects->mutex);
 	const guint64 *id = g_hash_table_lookup (objects->by_object, object);
-	return id ? *id : 0;
+	if (id)
+		return *id;
+	ObjectHandle *handle = g_object_get_qdata (object, handle_quark ());
+	return handle && handle->scope == objects->scope ? handle->id : 0;
+}
+
+gboolean
+_pps_document_objects_bind (PpsDocumentObjects *objects, guint64 id, GObject *object)
+{
+	g_autoptr (GRecMutexLocker) locker = g_rec_mutex_locker_new (&objects->mutex);
+	ObjectHandle *previous = g_object_get_qdata (object, handle_quark ());
+	if (previous)
+		return id != 0 && previous->scope == objects->scope && previous->id == id;
+	if (!id || g_hash_table_contains (objects->by_id, &id) || g_hash_table_contains (objects->by_object, object))
+		return FALSE;
+	ObjectHandle *handle = g_new (ObjectHandle, 1);
+	handle->id = id;
+	/* The token outlives the table if a wrapper survives its document. */
+	handle->scope = g_object_ref (objects->scope);
+	if (g_object_replace_qdata (object, handle_quark (), NULL, handle, free_handle, NULL))
+		return TRUE;
+	free_handle (handle);
+	previous = g_object_get_qdata (object, handle_quark ());
+	return previous && previous->scope == objects->scope && previous->id == id;
 }
 
 GObject *

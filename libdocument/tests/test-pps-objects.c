@@ -72,6 +72,33 @@ layer_title_lifetime (void)
 }
 
 static void
+bound_wrapper_lifetime (void)
+{
+	g_autoptr (PpsDocumentObjects) first = _pps_document_objects_new ();
+	g_autoptr (PpsDocumentObjects) second = _pps_document_objects_new ();
+	g_autoptr (GObject) wrapper = g_object_new (G_TYPE_OBJECT, NULL);
+	g_autoptr (GObject) alias = g_object_new (G_TYPE_OBJECT, NULL);
+	g_assert_false (_pps_document_objects_bind (first, 0, wrapper));
+	g_assert_true (_pps_document_objects_bind (first, 7, wrapper));
+	g_assert_true (_pps_document_objects_bind (first, 7, alias));
+	g_assert_true (_pps_document_objects_bind (first, 7, wrapper));
+	g_assert_false (_pps_document_objects_bind (first, 8, wrapper));
+	g_assert_false (_pps_document_objects_bind (second, 7, wrapper));
+	g_assert_cmpuint (_pps_document_objects_get_id (first, wrapper), ==, 7);
+	g_assert_cmpuint (_pps_document_objects_get_id (second, wrapper), ==, 0);
+	g_assert_null (_pps_document_objects_lookup (first, 7, G_TYPE_OBJECT));
+	GWeakRef weak;
+	g_weak_ref_init (&weak, alias);
+	g_clear_object (&alias);
+	g_assert_null (g_weak_ref_get (&weak));
+	g_weak_ref_clear (&weak);
+	g_clear_pointer (&first, _pps_document_objects_free);
+	first = _pps_document_objects_new ();
+	/* Surviving wrappers cannot become valid in a subsequently opened document. */
+	g_assert_cmpuint (_pps_document_objects_get_id (first, wrapper), ==, 0);
+}
+
+static void
 owned_lifetime (void)
 {
 	PpsDocumentObjects *objects = _pps_document_objects_new ();
@@ -97,5 +124,6 @@ main (int argc, char **argv)
 	g_test_add_func ("/document-objects/owned-lifetime", owned_lifetime);
 	g_test_add_func ("/document-objects/concurrent-identity", concurrent_identity);
 	g_test_add_func ("/document-objects/layer-title-lifetime", layer_title_lifetime);
+	g_test_add_func ("/document-objects/bound-wrapper-lifetime", bound_wrapper_lifetime);
 	return g_test_run ();
 }

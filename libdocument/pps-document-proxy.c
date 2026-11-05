@@ -341,6 +341,7 @@ type_for_interfaces (const char *const *interfaces)
 		{ PPS_TYPE_SELECTION, (GInterfaceInitFunc) _pps_document_proxy_selection_iface_init },
 		{ PPS_TYPE_DOCUMENT_LINKS, (GInterfaceInitFunc) _pps_document_proxy_links_iface_init },
 		{ PPS_TYPE_DOCUMENT_LAYERS, (GInterfaceInitFunc) _pps_document_proxy_layers_iface_init },
+		{ PPS_TYPE_DOCUMENT_FORMS, (GInterfaceInitFunc) _pps_document_proxy_forms_iface_init },
 	};
 	for (guint i = 0; i < G_N_ELEMENTS (capabilities); i++) {
 		if (g_strv_contains (interfaces, g_type_name (capabilities[i].type)))

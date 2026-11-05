@@ -11,6 +11,7 @@
 
 #include "pps-document-proxy-private.h"
 #include "pps-document-security.h"
+#include "pps-form-field-private.h"
 #include "pps-outlines.h"
 
 static char *fixture_dir;
@@ -344,6 +345,28 @@ links_and_outlines (void)
 }
 
 static char *
+write_pdf_fixture (const char *name, const char *const *objects, guint n_objects)
+{
+	g_autoptr (GString) pdf = g_string_new ("%PDF-1.7\n");
+	g_autofree gsize *offsets = g_new (gsize, n_objects);
+	for (guint i = 0; i < n_objects; i++) {
+		offsets[i] = pdf->len;
+		g_string_append_printf (pdf, "%u 0 obj\n%s\nendobj\n", i + 1, objects[i]);
+	}
+	gsize xref = pdf->len;
+	g_string_append_printf (pdf, "xref\n0 %u\n0000000000 65535 f \n", (guint) n_objects + 1);
+	for (guint i = 0; i < n_objects; i++)
+		g_string_append_printf (pdf, "%010" G_GSIZE_FORMAT " 00000 n \n", offsets[i]);
+	g_string_append_printf (pdf, "trailer\n<< /Size %u /Root 1 0 R >>\nstartxref\n%" G_GSIZE_FORMAT "\n%%%%EOF\n",
+	                        (guint) n_objects + 1, xref);
+	g_autofree char *path = g_build_filename (fixture_dir, name, NULL);
+	g_autoptr (GError) error = NULL;
+	g_assert_true (g_file_set_contents (path, pdf->str, pdf->len, &error));
+	g_assert_no_error (error);
+	return g_steal_pointer (&path);
+}
+
+static char *
 create_layers_fixture (void)
 {
 	const char *content = "/OC /Red BDC 1 0 0 rg 0 0 100 100 re f EMC\n"
@@ -358,23 +381,260 @@ create_layers_fixture (void)
 		"<< /Type /OCG /Name (Blue) >>",
 		"<< /Type /Annot /Subtype /Link /Rect [0 0 20 20] /A << /S /SetOCGState /State [/OFF 5 0 R /ON 6 0 R] >> >>"
 	};
-	g_autoptr (GString) pdf = g_string_new ("%PDF-1.7\n");
-	gsize offsets[G_N_ELEMENTS (objects)];
-	for (guint i = 0; i < G_N_ELEMENTS (objects); i++) {
-		offsets[i] = pdf->len;
-		g_string_append_printf (pdf, "%u 0 obj\n%s\nendobj\n", i + 1, objects[i]);
+	return write_pdf_fixture ("layers.pdf", objects, G_N_ELEMENTS (objects));
+}
+
+static char *
+create_forms_fixture (void)
+{
+	const char *objects[] = {
+		"<< /Type /Catalog /Pages 2 0 R /AcroForm 5 0 R >>",
+		"<< /Type /Pages /Count 1 /Kids [3 0 R] >>",
+		"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 400 400] /Resources << /Font << /Helv 6 0 R >> >> /Contents 4 0 R /Annots [7 0 R 8 0 R 9 0 R 10 0 R 11 0 R 13 0 R 14 0 R 17 0 R 18 0 R 19 0 R] >>",
+		"<< /Length 0 >>\nstream\nendstream",
+		"<< /Fields [7 0 R 8 0 R 9 0 R 10 0 R 11 0 R 12 0 R 17 0 R 18 0 R 19 0 R] /DR << /Font << /Helv 6 0 R >> >> /DA (/Helv 12 Tf 0 g) /NeedAppearances true >>",
+		"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+		"<< /Type /Annot /Subtype /Widget /FT /Tx /T (text) /TU (Text) /V (initial) /DV (default) /DA (/Helv 12 Tf 0 g) /MaxLen 42 /Rect [10 350 150 375] /P 3 0 R >>",
+		"<< /Type /Annot /Subtype /Widget /FT /Tx /T (secret) /TU (Secret) /Ff 12288 /V (secret) /Rect [10 300 150 340] /P 3 0 R >>",
+		"<< /Type /Annot /Subtype /Widget /FT /Btn /T (check) /TU (Check) /V /Off /DV /Off /AS /Off /AP << /N << /Off 15 0 R /Yes 16 0 R >> >> /Rect [10 260 30 280] /P 3 0 R >>",
+		"<< /Type /Annot /Subtype /Widget /FT /Ch /T (list) /TU (List) /Ff 2097152 /Opt [(Red) (Green) (Blue)] /V [(Red)] /DV [(Red)] /I [0] /Rect [50 200 150 280] /P 3 0 R >>",
+		"<< /Type /Annot /Subtype /Widget /FT /Ch /T (combo) /TU (Combo) /Ff 393216 /Opt [(One) (Two)] /V (One) /DV (One) /Rect [10 160 150 185] /P 3 0 R >>",
+		"<< /FT /Btn /T (radio) /Ff 32768 /V /A /DV /A /Kids [13 0 R 14 0 R] >>",
+		"<< /Type /Annot /Subtype /Widget /Parent 12 0 R /TU (Radio A) /AS /A /AP << /N << /Off 15 0 R /A 16 0 R >> >> /Rect [10 120 30 140] /P 3 0 R >>",
+		"<< /Type /Annot /Subtype /Widget /Parent 12 0 R /TU (Radio B) /AS /Off /AP << /N << /Off 15 0 R /B 16 0 R >> >> /Rect [40 120 60 140] /P 3 0 R >>",
+		"<< /Type /XObject /Subtype /Form /BBox [0 0 20 20] /Length 0 >>\nstream\nendstream",
+		"<< /Type /XObject /Subtype /Form /BBox [0 0 20 20] /Length 23 >>\nstream\n0 0 0 rg 0 0 20 20 re f\nendstream",
+		"<< /Type /Annot /Subtype /Widget /FT /Btn /Ff 65536 /T (reset) /TU (Reset) /A << /S /ResetForm /Fields [(text)] /Flags 0 >> /Rect [10 80 100 105] /P 3 0 R >>",
+		"<< /Type /Annot /Subtype /Widget /FT /Sig /T (signature) /TU (Signature) /Rect [10 40 150 65] /P 3 0 R >>",
+		"<< /Type /Annot /Subtype /Widget /FT /Tx /T (readonly) /TU (Read only) /Ff 1 /V (fixed) /Rect [180 350 320 375] /P 3 0 R >>"
+	};
+	return write_pdf_fixture ("forms.pdf", objects, G_N_ELEMENTS (objects));
+}
+
+static PpsFormField *
+find_field (PpsMappingList *mappings, const char *name)
+{
+	for (guint i = 0; i < pps_mapping_list_length (mappings); i++) {
+		PpsFormField *field = pps_mapping_list_nth (mappings, i)->data;
+		if (g_strcmp0 (pps_form_field_get_alternate_name (field), name) == 0)
+			return field;
 	}
-	gsize xref = pdf->len;
-	g_string_append_printf (pdf, "xref\n0 %u\n0000000000 65535 f \n", (guint) G_N_ELEMENTS (objects) + 1);
-	for (guint i = 0; i < G_N_ELEMENTS (objects); i++)
-		g_string_append_printf (pdf, "%010" G_GSIZE_FORMAT " 00000 n \n", offsets[i]);
-	g_string_append_printf (pdf, "trailer\n<< /Size %u /Root 1 0 R >>\nstartxref\n%" G_GSIZE_FORMAT "\n%%%%EOF\n",
-	                        (guint) G_N_ELEMENTS (objects) + 1, xref);
-	g_autofree char *path = g_build_filename (fixture_dir, "layers.pdf", NULL);
+	g_error ("Missing form field %s", name);
+}
+
+static void
+assert_form_text (PpsDocumentForms *forms, PpsFormField *field, const char *expected)
+{
+	g_autofree char *text = PPS_IS_FORM_FIELD_TEXT (field)
+	                            ? pps_document_forms_form_field_text_get_text (forms, field)
+	                            : pps_document_forms_form_field_choice_get_text (forms, field);
+	g_assert_cmpstr (text, ==, expected);
+}
+
+static void
+modified_notified (PpsDocument *document, GParamSpec *property, guint *count)
+{
+	(*count)++;
+}
+
+static void
+forms_edit_and_save (void)
+{
+	g_autofree char *path = create_forms_fixture ();
+	g_autofree char *uri = g_filename_to_uri (path, NULL, NULL);
+	g_autoptr (PpsDocument) document = new_document ();
+	load_document (document, uri);
+	g_assert_true (PPS_IS_DOCUMENT_FORMS (document));
+	PpsDocumentForms *forms = PPS_DOCUMENT_FORMS (document);
+	g_autoptr (PpsPage) page = pps_document_get_page (document, 0);
+	PpsMappingList *mappings = pps_document_forms_get_form_fields (forms, page);
+	g_assert_nonnull (mappings);
+	g_assert_cmpuint (pps_mapping_list_get_page (mappings), ==, 0);
+	g_assert_cmpuint (pps_mapping_list_length (mappings), ==, 10);
+	PpsFormField *text = find_field (mappings, "Text");
+	PpsFormField *secret = find_field (mappings, "Secret");
+	PpsFormField *check = find_field (mappings, "Check");
+	PpsFormField *list = find_field (mappings, "List");
+	PpsFormField *combo = find_field (mappings, "Combo");
+	PpsFormField *radio_a = pps_mapping_list_get_data (mappings, &(PpsPoint){ 20, 270 });
+	PpsFormField *radio_b = pps_mapping_list_get_data (mappings, &(PpsPoint){ 50, 270 });
+	PpsFormField *reset = find_field (mappings, "Reset");
+	g_assert_true (PPS_IS_FORM_FIELD_SIGNATURE (find_field (mappings, "Signature")));
+	g_assert_true (find_field (mappings, "Read only")->is_read_only);
+	g_assert_cmpint (text->page->index, ==, 0);
+	g_assert_null (text->page->backend_page);
+	/* Poppler reports the automatic/default size as zero for this fixture. */
+	g_assert_cmpfloat (text->font_size, ==, 0);
+	g_assert_cmpint (PPS_FORM_FIELD_TEXT (text)->max_len, ==, 42);
+	g_assert_cmpint (PPS_FORM_FIELD_TEXT (secret)->type, ==, PPS_FORM_FIELD_TEXT_MULTILINE);
+	g_assert_true (PPS_FORM_FIELD_TEXT (secret)->is_password);
+	g_assert_true (PPS_FORM_FIELD_CHOICE (list)->multi_select);
+	g_assert_true (PPS_FORM_FIELD_CHOICE (combo)->is_editable);
+	g_assert_cmpint (PPS_FORM_FIELD_BUTTON (radio_a)->type, ==, PPS_FORM_FIELD_BUTTON_RADIO);
+	g_assert_cmpint (PPS_FORM_FIELD_BUTTON (reset)->type, ==, PPS_FORM_FIELD_BUTTON_PUSH);
+	g_assert_cmpint (pps_link_action_get_action_type (pps_link_get_action (reset->activation_link)), ==, PPS_LINK_ACTION_TYPE_RESET_FORM);
+	assert_form_text (forms, text, "initial");
+	g_assert_false (pps_document_get_modified (document));
+	g_assert_false (pps_document_forms_document_is_modified (forms));
+	guint notifications = 0;
+	g_signal_connect (document, "notify::modified", G_CALLBACK (modified_notified), &notifications);
+	/* A page-cache refresh must preserve an active overlay's unsaved text. */
+	g_free (PPS_FORM_FIELD_TEXT (text)->text);
+	PPS_FORM_FIELD_TEXT (text)->text = g_strdup ("Pending overlay edit");
+	text->changed = TRUE;
+	PpsMappingList *again = pps_document_forms_get_form_fields (forms, page);
+	g_assert_true (find_field (again, "Text") == text);
+	g_assert_true (text->changed);
+	g_assert_cmpstr (PPS_FORM_FIELD_TEXT (text)->text, ==, "Pending overlay edit");
+	pps_mapping_list_unref (again);
+	pps_document_forms_form_field_text_set_text (forms, text, "Edited α");
+	assert_form_text (forms, text, "Edited α");
+	g_assert_true (pps_document_get_modified (document));
+	g_assert_true (pps_document_forms_document_is_modified (forms));
+	g_assert_cmpuint (notifications, ==, 1);
+	pps_document_forms_form_field_choice_set_text (forms, combo, "Custom β");
+	assert_form_text (forms, combo, "Custom β");
+	g_assert_false (pps_document_forms_form_field_button_get_state (forms, check));
+	pps_document_forms_form_field_button_set_state (forms, check, TRUE);
+	g_assert_true (pps_document_forms_form_field_button_get_state (forms, check));
+	g_assert_cmpint (pps_document_forms_form_field_choice_get_n_items (forms, list), ==, 3);
+	g_autofree char *item = pps_document_forms_form_field_choice_get_item (forms, list, 1);
+	g_assert_cmpstr (item, ==, "Green");
+	g_assert_true (pps_document_forms_form_field_choice_is_item_selected (forms, list, 0));
+	pps_document_forms_form_field_choice_unselect_all (forms, list);
+	pps_document_forms_form_field_choice_select_item (forms, list, 1);
+	pps_document_forms_form_field_choice_select_item (forms, list, 2);
+	g_assert_true (pps_document_forms_form_field_choice_is_item_selected (forms, list, 1));
+	g_assert_true (pps_document_forms_form_field_choice_is_item_selected (forms, list, 2));
+	pps_document_forms_form_field_choice_toggle_item (forms, list, 2);
+	g_assert_false (pps_document_forms_form_field_choice_is_item_selected (forms, list, 0));
+	g_assert_false (pps_document_forms_form_field_choice_is_item_selected (forms, list, 2));
+	g_assert_true (pps_document_forms_form_field_button_get_state (forms, radio_a));
+	pps_document_forms_form_field_button_set_state (forms, radio_b, TRUE);
+	g_assert_false (pps_document_forms_form_field_button_get_state (forms, radio_a));
+	g_assert_true (pps_document_forms_form_field_button_get_state (forms, radio_b));
 	g_autoptr (GError) error = NULL;
-	g_assert_true (g_file_set_contents (path, pdf->str, pdf->len, &error));
+	g_autofree char *saved_path = g_build_filename (fixture_dir, "forms-saved.pdf", NULL);
+	g_autofree char *saved_uri = g_filename_to_uri (saved_path, NULL, NULL);
+	g_assert_true (pps_document_save (document, saved_uri, &error));
 	g_assert_no_error (error);
-	return g_steal_pointer (&path);
+	g_assert_false (pps_document_get_modified (document));
+	g_assert_false (pps_document_forms_document_is_modified (forms));
+	g_assert_cmpuint (notifications, ==, 2);
+	g_autoptr (PpsDocument) saved = new_document ();
+	load_document (saved, saved_uri);
+	g_autoptr (PpsPage) saved_page = pps_document_get_page (saved, 0);
+	PpsMappingList *saved_fields = pps_document_forms_get_form_fields (PPS_DOCUMENT_FORMS (saved), saved_page);
+	assert_form_text (PPS_DOCUMENT_FORMS (saved), find_field (saved_fields, "Text"), "Edited α");
+	assert_form_text (PPS_DOCUMENT_FORMS (saved), find_field (saved_fields, "Combo"), "Custom β");
+	g_assert_true (pps_document_forms_form_field_button_get_state (PPS_DOCUMENT_FORMS (saved), find_field (saved_fields, "Check")));
+	g_assert_true (pps_document_forms_form_field_choice_is_item_selected (PPS_DOCUMENT_FORMS (saved), find_field (saved_fields, "List"), 1));
+	g_assert_true (pps_document_forms_form_field_button_get_state (PPS_DOCUMENT_FORMS (saved), pps_mapping_list_get_data (saved_fields, &(PpsPoint){ 50, 270 })));
+	pps_mapping_list_unref (saved_fields);
+	/* The reset button must retain its field list across the process boundary. */
+	pps_document_forms_reset_form (forms, pps_link_get_action (reset->activation_link));
+	assert_form_text (forms, text, "default");
+	assert_form_text (forms, combo, "Custom β");
+	g_assert_true (pps_document_forms_form_field_button_get_state (forms, check));
+	g_assert_true (pps_document_get_modified (document));
+	g_assert_true (pps_document_forms_document_is_modified (forms));
+	g_assert_cmpuint (notifications, ==, 3);
+	pps_document_forms_form_field_text_set_text (forms, text, "Keep this");
+	g_autoptr (PpsLinkAction) exclude = pps_link_action_new_reset_form (g_list_append (NULL, g_strdup ("text")), TRUE);
+	pps_document_forms_reset_form (forms, exclude);
+	assert_form_text (forms, text, "Keep this");
+	/* Native reset restores the selection and clears the editable text. */
+	assert_form_text (forms, combo, NULL);
+	g_assert_true (pps_document_forms_form_field_choice_is_item_selected (forms, combo, 0));
+	g_assert_false (pps_document_forms_form_field_button_get_state (forms, check));
+	g_autoptr (PpsLinkAction) all = pps_link_action_new_reset_form (NULL, FALSE);
+	pps_document_forms_reset_form (forms, all);
+	assert_form_text (forms, text, "default");
+	pps_mapping_list_unref (mappings);
+	g_assert_cmpint (g_unlink (saved_path), ==, 0);
+	g_assert_cmpint (g_unlink (path), ==, 0);
+}
+
+static void
+forms_isolation_and_errors (void)
+{
+	g_autofree char *path = create_forms_fixture ();
+	g_autofree char *uri = g_filename_to_uri (path, NULL, NULL);
+	g_autoptr (PpsDocument) first = new_document ();
+	g_autoptr (PpsDocument) second = new_document ();
+	g_autoptr (PpsDocument) plain = new_document ();
+	load_document (first, uri);
+	load_document (second, uri);
+	load_document (plain, fixture_uri);
+	PpsDocumentForms *forms = PPS_DOCUMENT_FORMS (first);
+	g_autoptr (PpsPage) page = pps_document_get_page (first, 0);
+	g_assert_null (pps_document_forms_get_form_fields (PPS_DOCUMENT_FORMS (plain), page));
+	PpsMappingList *fields = pps_document_forms_get_form_fields (forms, page);
+	PpsMappingList *other_fields = pps_document_forms_get_form_fields (PPS_DOCUMENT_FORMS (second), page);
+	PpsFormField *text = find_field (fields, "Text");
+	pps_document_forms_form_field_text_set_text (forms, text, "First document");
+	pps_document_forms_form_field_text_set_text (PPS_DOCUMENT_FORMS (second), text, "Foreign field");
+	assert_form_text (forms, text, "First document");
+	assert_form_text (PPS_DOCUMENT_FORMS (second), find_field (other_fields, "Text"), "initial");
+	g_assert_false (pps_document_get_modified (second));
+	g_assert_false (pps_document_forms_document_is_modified (PPS_DOCUMENT_FORMS (second)));
+	PpsDocumentSession *session = _pps_document_proxy_get_session (first);
+	PpsDocumentObjects *objects = _pps_document_proxy_get_objects (first);
+	guint64 text_id = _pps_document_objects_get_id (objects, G_OBJECT (text));
+	guint64 list_id = _pps_document_objects_get_id (objects, G_OBJECT (find_field (fields, "List")));
+	g_autoptr (GError) error = NULL;
+	g_autofree char *value = NULL;
+	gboolean present;
+	guint state;
+	g_assert_false (pps_dbus_document_call_get_form_text_sync (session->proxy, G_MAXUINT64,
+	                                                           G_DBUS_CALL_FLAGS_NONE, 5000, &present, &value, NULL, &error));
+	g_assert_error (error, G_IO_ERROR, G_IO_ERROR_INVALID_ARGUMENT);
+	g_clear_error (&error);
+	g_assert_false (pps_dbus_document_call_set_form_button_state_sync (session->proxy, text_id, TRUE,
+	                                                                   G_DBUS_CALL_FLAGS_NONE, 5000, &state, NULL, &error));
+	g_assert_error (error, G_IO_ERROR, G_IO_ERROR_INVALID_ARGUMENT);
+	g_clear_error (&error);
+	g_assert_false (pps_dbus_document_call_get_form_text_sync (session->proxy, list_id,
+	                                                           G_DBUS_CALL_FLAGS_NONE, 5000, &present, &value, NULL, &error));
+	g_assert_error (error, G_IO_ERROR, G_IO_ERROR_INVALID_ARGUMENT);
+	g_clear_error (&error);
+	for (int index = -1; index <= 3; index += 4) {
+		g_assert_false (pps_dbus_document_call_get_form_choice_item_sync (session->proxy, list_id, index,
+		                                                                  G_DBUS_CALL_FLAGS_NONE, 5000, &present, &value, NULL, &error));
+		g_assert_error (error, G_IO_ERROR, G_IO_ERROR_INVALID_ARGUMENT);
+		g_clear_error (&error);
+		g_assert_false (pps_dbus_document_call_select_form_choice_sync (session->proxy, list_id, index, FALSE,
+		                                                                G_DBUS_CALL_FLAGS_NONE, 5000, &state, NULL, &error));
+		g_assert_error (error, G_IO_ERROR, G_IO_ERROR_INVALID_ARGUMENT);
+		g_clear_error (&error);
+	}
+	g_autoptr (GVariant) mappings = NULL;
+	g_assert_false (pps_dbus_document_call_get_form_fields_sync (session->proxy, 100,
+	                                                             G_DBUS_CALL_FLAGS_NONE, 5000, &present, &mappings, NULL, &error));
+	g_assert_error (error, G_IO_ERROR, G_IO_ERROR_INVALID_ARGUMENT);
+	g_clear_error (&error);
+	/* Close-prompt state must remain local even while a worker cannot respond. */
+	pid_t pid = g_ascii_strtoll (g_subprocess_get_identifier (session->process), NULL, 10);
+	g_subprocess_send_signal (session->process, SIGSTOP);
+	siginfo_t status;
+	g_assert_cmpint (waitid (P_PID, pid, &status, WSTOPPED | WNOWAIT), ==, 0);
+	gboolean modified = pps_document_get_modified (first);
+	gboolean forms_modified = pps_document_forms_document_is_modified (forms);
+	g_subprocess_send_signal (session->process, SIGCONT);
+	g_assert_true (modified);
+	g_assert_true (forms_modified);
+	g_autofree char *missing_path = g_build_filename (fixture_dir, "missing", "saved.pdf", NULL);
+	g_autofree char *missing_uri = g_filename_to_uri (missing_path, NULL, NULL);
+	g_assert_false (pps_document_save (first, missing_uri, &error));
+	g_assert_nonnull (error);
+	g_clear_error (&error);
+	g_assert_true (pps_document_get_modified (first));
+	g_assert_true (pps_document_forms_document_is_modified (forms));
+	assert_form_text (forms, text, "First document");
+	render_page (first, 0);
+	pps_mapping_list_unref (fields);
+	pps_mapping_list_unref (other_fields);
+	g_assert_cmpint (g_unlink (path), ==, 0);
 }
 
 static guint32
@@ -501,6 +761,8 @@ main (int argc, char **argv)
 	g_test_add_func ("/document-proxy/selection", selection);
 	g_test_add_func ("/document-proxy/links-and-outlines", links_and_outlines);
 	g_test_add_func ("/document-proxy/layers-and-actions", layers_and_layer_actions);
+	g_test_add_func ("/document-proxy/forms-edit-and-save", forms_edit_and_save);
+	g_test_add_func ("/document-proxy/forms-isolation-and-errors", forms_isolation_and_errors);
 	int result = g_test_run ();
 	g_unlink (fixture_path);
 	g_rmdir (fixture_dir);

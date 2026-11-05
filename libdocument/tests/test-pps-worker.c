@@ -11,6 +11,7 @@
 #include "pps-document-info-private.h"
 #include "pps-document-session-private.h"
 #include "pps-document.h"
+#include "pps-file-exporter.h"
 
 static PpsDocumentSession *
 new_session (void)
@@ -189,6 +190,15 @@ reject_invalid_requests (void)
 	g_clear_error (&error);
 	g_assert_false (pps_dbus_document_call_get_media_data_sync (
 	    session->proxy, 1, G_DBUS_CALL_FLAGS_NONE, 5000, NULL, NULL, NULL, NULL, NULL, &error));
+	g_assert_error (error, G_IO_ERROR, G_IO_ERROR_NOT_INITIALIZED);
+	g_clear_error (&error);
+	g_assert_false (pps_dbus_document_call_export_begin_sync (
+	    session->proxy, g_variant_new_handle (0), PPS_FILE_FORMAT_PDF, 0, 0, 200, 200, FALSE, 1,
+	    G_DBUS_CALL_FLAGS_NONE, 5000, NULL, NULL, NULL, &error));
+	g_assert_error (error, G_IO_ERROR, G_IO_ERROR_NOT_INITIALIZED);
+	g_clear_error (&error);
+	g_assert_false (pps_dbus_document_call_export_end_sync (
+	    session->proxy, G_DBUS_CALL_FLAGS_NONE, 5000, NULL, &error));
 	g_assert_error (error, G_IO_ERROR, G_IO_ERROR_NOT_INITIALIZED);
 	g_clear_error (&error);
 	g_assert_cmpint (load (session, "missing.pdf", "", &error), ==, -1);

@@ -268,6 +268,7 @@ document_worker = executable(
   'pps-document-worker-images.c',
   'pps-document-worker-transition.c',
   'pps-document-worker-media.c',
+  'pps-document-worker-export.c',
   document_dbus[1],
   include_directories: top_inc,
   dependencies: libppsdocument_dep,

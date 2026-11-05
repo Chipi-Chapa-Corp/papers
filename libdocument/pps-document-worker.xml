@@ -79,6 +79,28 @@
       <arg name="size" type="t" direction="out"/>
       <arg name="buffer" type="h" direction="out"/>
     </method>
+    <method name="ExportBegin">
+      <annotation name="org.gtk.GDBus.C.UnixFD" value="true"/>
+      <arg name="fd" type="h" direction="in"/>
+      <arg name="format" type="u" direction="in"/>
+      <arg name="first_page" type="i" direction="in"/>
+      <arg name="last_page" type="i" direction="in"/>
+      <arg name="paper_width" type="d" direction="in"/>
+      <arg name="paper_height" type="d" direction="in"/>
+      <arg name="duplex" type="b" direction="in"/>
+      <arg name="pages_per_sheet" type="i" direction="in"/>
+    </method>
+    <method name="ExportBeginPage"/>
+    <method name="ExportPage">
+      <arg name="page" type="i" direction="in"/>
+      <arg name="rotation" type="i" direction="in"/>
+      <arg name="scale" type="d" direction="in"/>
+      <arg name="target_width" type="i" direction="in"/>
+      <arg name="target_height" type="i" direction="in"/>
+      <arg name="annotations" type="u" direction="in"/>
+    </method>
+    <method name="ExportEndPage"/>
+    <method name="ExportEnd"/>
     <method name="GetAttachments">
       <annotation name="org.gtk.GDBus.C.UnixFD" value="true"/>
       <arg name="start" type="u" direction="in"/>

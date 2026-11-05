@@ -86,6 +86,106 @@ pdf_nup_unlocks_document (gconstpointer data)
 }
 
 static void
+export_descriptor_and_errors (void)
+{
+	g_autoptr (GError) error = NULL;
+	g_autofree char *directory = g_dir_make_tmp ("papers-export-test-XXXXXX", &error);
+	g_assert_no_error (error);
+	g_autofree char *source_path = create_pdf (directory);
+	g_autoptr (PpsDocument) document = open_document ("application/pdf", source_path, TRUE);
+	PpsDocumentSession *session = _pps_document_proxy_get_session (document);
+	g_assert_false (pps_dbus_document_call_export_begin_page_sync (session->proxy, G_DBUS_CALL_FLAGS_NONE, 5000, NULL, &error));
+	g_assert_error (error, G_IO_ERROR, G_IO_ERROR_NOT_INITIALIZED);
+	g_clear_error (&error);
+	g_autofree char *path = g_build_filename (directory, "unlinked.pdf", NULL);
+	int fd = g_open (path, O_RDWR | O_CREAT | O_TRUNC | O_CLOEXEC, 0600);
+	g_assert_cmpint (fd, >=, 0);
+	g_assert_cmpint (g_unlink (path), ==, 0);
+	g_autoptr (GUnixFDList) descriptors = g_unix_fd_list_new ();
+	int handle = g_unix_fd_list_append (descriptors, fd, &error);
+	g_assert_no_error (error);
+	const struct {
+		int handle;
+		guint format;
+		int first, last;
+		double width, height;
+		int nup;
+	} invalid[] = {
+		{ -1, PPS_FILE_FORMAT_PDF, 0, 1, 200, 200, 1 },
+		{ 1, PPS_FILE_FORMAT_PDF, 0, 1, 200, 200, 1 },
+		{ 0, PPS_FILE_FORMAT_UNKNOWN, 0, 1, 200, 200, 1 },
+		{ 0, PPS_FILE_FORMAT_PDF, -1, 1, 200, 200, 1 },
+		{ 0, PPS_FILE_FORMAT_PDF, 1, 0, 200, 200, 1 },
+		{ 0, PPS_FILE_FORMAT_PDF, 0, 2, 200, 200, 1 },
+		{ 0, PPS_FILE_FORMAT_PDF, 0, 1, 0, 200, 1 },
+		{ 0, PPS_FILE_FORMAT_PDF, 0, 1, 200, NAN, 1 },
+		{ 0, PPS_FILE_FORMAT_PDF, 0, 1, 200, 200, 0 },
+		{ 0, PPS_FILE_FORMAT_PDF, 0, 1, 200, 200, 17 },
+	};
+	for (guint i = 0; i < G_N_ELEMENTS (invalid); i++) {
+		g_assert_false (pps_dbus_document_call_export_begin_sync (session->proxy, g_variant_new_handle (invalid[i].handle),
+		                                                          invalid[i].format, invalid[i].first, invalid[i].last,
+		                                                          invalid[i].width, invalid[i].height, FALSE, invalid[i].nup,
+		                                                          G_DBUS_CALL_FLAGS_NONE, 5000, descriptors, NULL, NULL, &error));
+		g_assert_error (error, G_IO_ERROR, G_IO_ERROR_INVALID_ARGUMENT);
+		g_clear_error (&error);
+	}
+	g_autoptr (GUnixFDList) readonly = g_unix_fd_list_new ();
+	int input = g_open (source_path, O_RDONLY | O_CLOEXEC, 0);
+	g_assert_cmpint (input, >=, 0);
+	g_assert_cmpint (g_unix_fd_list_append (readonly, input, &error), ==, 0);
+	close (input);
+	g_assert_no_error (error);
+	g_assert_false (pps_dbus_document_call_export_begin_sync (session->proxy, g_variant_new_handle (0), PPS_FILE_FORMAT_PDF,
+	                                                          0, 1, 200, 200, FALSE, 1, G_DBUS_CALL_FLAGS_NONE, 5000, readonly, NULL, NULL, &error));
+	g_assert_error (error, G_IO_ERROR, G_IO_ERROR_INVALID_ARGUMENT);
+	g_clear_error (&error);
+	int pipes[2];
+	g_assert_cmpint (pipe (pipes), ==, 0);
+	g_autoptr (GUnixFDList) pipe_descriptors = g_unix_fd_list_new ();
+	g_assert_cmpint (g_unix_fd_list_append (pipe_descriptors, pipes[1], &error), ==, 0);
+	close (pipes[0]);
+	close (pipes[1]);
+	g_assert_no_error (error);
+	g_assert_false (pps_dbus_document_call_export_begin_sync (session->proxy, g_variant_new_handle (0), PPS_FILE_FORMAT_PDF,
+	                                                          0, 1, 200, 200, FALSE, 1, G_DBUS_CALL_FLAGS_NONE, 5000, pipe_descriptors, NULL, NULL, &error));
+	g_assert_error (error, G_IO_ERROR, G_IO_ERROR_INVALID_ARGUMENT);
+	g_clear_error (&error);
+	/* The destination has no pathname: only the passed descriptor can reach it. */
+	g_assert_true (pps_dbus_document_call_export_begin_sync (session->proxy, g_variant_new_handle (handle), PPS_FILE_FORMAT_PDF,
+	                                                         0, 1, 200, 200, FALSE, 1, G_DBUS_CALL_FLAGS_NONE, 5000, descriptors, NULL, NULL, &error));
+	g_assert_no_error (error);
+	g_assert_false (pps_dbus_document_call_export_page_sync (session->proxy, 2, 0, 1., -1, -1, PPS_RENDER_ANNOTS_ALL,
+	                                                         G_DBUS_CALL_FLAGS_NONE, 5000, NULL, &error));
+	g_assert_error (error, G_IO_ERROR, G_IO_ERROR_INVALID_ARGUMENT);
+	g_clear_error (&error);
+	g_assert_true (pps_dbus_document_call_export_begin_page_sync (session->proxy, G_DBUS_CALL_FLAGS_NONE, 5000, NULL, &error));
+	g_assert_no_error (error);
+	g_assert_true (pps_dbus_document_call_export_page_sync (session->proxy, 0, 0, 1., -1, -1, PPS_RENDER_ANNOTS_ALL,
+	                                                        G_DBUS_CALL_FLAGS_NONE, 5000, NULL, &error));
+	g_assert_no_error (error);
+	g_assert_true (pps_dbus_document_call_export_end_page_sync (session->proxy, G_DBUS_CALL_FLAGS_NONE, 5000, NULL, &error));
+	g_assert_no_error (error);
+	g_assert_true (pps_dbus_document_call_export_end_sync (session->proxy, G_DBUS_CALL_FLAGS_NONE, 5000, NULL, &error));
+	g_assert_no_error (error);
+	g_assert_false (pps_dbus_document_call_export_end_sync (session->proxy, G_DBUS_CALL_FLAGS_NONE, 5000, NULL, &error));
+	g_assert_error (error, G_IO_ERROR, G_IO_ERROR_NOT_INITIALIZED);
+	g_clear_error (&error);
+	g_assert_cmpint (lseek (fd, 0, SEEK_SET), ==, 0);
+	g_autoptr (PpsDocument) exported = _pps_document_factory_create_document ("application/pdf", &error);
+	g_assert_no_error (error);
+	g_assert_true (pps_document_load_fd (exported, fd, &error));
+	g_assert_no_error (error);
+	pps_document_setup_cache (exported);
+	g_assert_cmpint (pps_document_get_n_pages (exported), ==, 1);
+	g_autoptr (PpsPage) page = pps_document_get_page (exported, 0);
+	g_autofree char *text = pps_document_text_get_text (PPS_DOCUMENT_TEXT (exported), page);
+	g_assert_nonnull (strstr (text, "Page one"));
+	g_assert_cmpint (g_unlink (source_path), ==, 0);
+	g_assert_cmpint (g_rmdir (directory), ==, 0);
+}
+
+static void
 finalization_failure (gconstpointer data)
 {
 	g_autoptr (GError) error = NULL;
@@ -130,6 +230,7 @@ main (int argc, char **argv)
 	g_test_init (&argc, &argv, NULL);
 	g_assert_true (pps_init ());
 	g_test_add_data_func ("/document-export/native-nup-unlocks-document", GINT_TO_POINTER (FALSE), pdf_nup_unlocks_document);
+	g_test_add_func ("/document-export/descriptor-and-errors", export_descriptor_and_errors);
 	g_test_add_data_func ("/document-export/native-finalization-failure", GINT_TO_POINTER (FALSE), finalization_failure);
 	int result = g_test_run ();
 	pps_shutdown ();

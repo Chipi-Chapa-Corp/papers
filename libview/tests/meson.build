@@ -23,3 +23,13 @@ proxy_annotations_test = executable(
 )
 
 test('pps-proxy-annotations-test', proxy_annotations_test, env: backend_env, depends: document_worker)
+
+proxy_export_test = executable(
+  'test-pps-proxy-export',
+  'test-pps-proxy-export.c',
+  include_directories: top_inc,
+  dependencies: libppsview_dep,
+  c_args: cflags,
+)
+
+test('pps-proxy-export-test', proxy_export_test, env: backend_env, depends: document_worker)

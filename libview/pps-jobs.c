@@ -24,6 +24,7 @@
 #include "pps-document-security.h"
 #include "pps-document-signatures.h"
 #include "pps-document-text.h"
+#include "pps-file-exporter-private.h"
 #include "pps-file-exporter.h"
 #include "pps-file-helpers.h"
 #include "pps-jobs.h"
@@ -1506,7 +1507,11 @@ pps_job_export_run (PpsJob *job)
 
 	pps_file_exporter_do_page (PPS_FILE_EXPORTER (pps_job_get_document (job)), priv->rc);
 
-	pps_job_succeeded (job);
+	g_autoptr (GError) error = NULL;
+	if (_pps_file_exporter_get_error (PPS_FILE_EXPORTER (pps_job_get_document (job)), &error))
+		pps_job_failed_from_error (job, error);
+	else
+		pps_job_succeeded (job);
 }
 
 static void

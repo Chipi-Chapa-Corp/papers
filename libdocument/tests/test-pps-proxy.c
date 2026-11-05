@@ -662,6 +662,103 @@ page_color (PpsDocument *document)
 }
 
 static void
+embedded_attachments (void)
+{
+	const char *objects[] = {
+		"<< /Type /Catalog /Pages 2 0 R /Names << /EmbeddedFiles << /Names [(data.bin) 5 0 R (empty.txt) 7 0 R] >> >> >>",
+		"<< /Type /Pages /Count 1 /Kids [3 0 R] >>",
+		"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 100 100] /Resources << >> /Contents 4 0 R >>",
+		"<< /Length 0 >>\nstream\nendstream",
+		"<< /Type /Filespec /F (data.bin) /Desc (Binary payload) /EF << /F 6 0 R >> >>",
+		"<< /Type /EmbeddedFile /Filter /ASCIIHexDecode /Params << /Size 5 /CreationDate (D:20200102030405+05'30') /ModDate (D:20240324112233Z) >> /Length 11 >>\nstream\n00ff610062>\nendstream",
+		"<< /Type /Filespec /F (empty.txt) /EF << /F 8 0 R >> >>",
+		"<< /Type /EmbeddedFile /Length 0 >>\nstream\nendstream"
+	};
+	g_autofree char *path = write_pdf_fixture ("attachments.pdf", objects, G_N_ELEMENTS (objects));
+	g_autofree char *uri = g_filename_to_uri (path, NULL, NULL);
+	g_autoptr (PpsDocument) document = new_document ();
+	load_document (document, uri);
+	g_assert_true (PPS_IS_DOCUMENT_ATTACHMENTS (document));
+	PpsDocumentAttachments *attachments = PPS_DOCUMENT_ATTACHMENTS (document);
+	PpsDocumentSession *session = _pps_document_proxy_get_session (document);
+	pid_t pid = g_ascii_strtoll (g_subprocess_get_identifier (session->process), NULL, 10);
+	g_subprocess_send_signal (session->process, SIGSTOP);
+	siginfo_t status;
+	g_assert_cmpint (waitid (P_PID, pid, &status, WSTOPPED | WNOWAIT), ==, 0);
+	gboolean present = pps_document_attachments_has_attachments (attachments);
+	g_subprocess_send_signal (session->process, SIGCONT);
+	g_assert_true (present);
+	g_autolist (PpsAttachment) items = pps_document_attachments_get_attachments (attachments);
+	g_assert_cmpuint (g_list_length (items), ==, 2);
+	PpsAttachment *binary = items->data;
+	PpsAttachment *empty = items->next->data;
+	g_assert_cmpstr (pps_attachment_get_name (binary), ==, "data.bin");
+	g_assert_cmpstr (pps_attachment_get_description (binary), ==, "Binary payload");
+	g_assert_cmpstr (pps_attachment_get_name (empty), ==, "empty.txt");
+	g_autoptr (GDateTime) created = g_date_time_new_from_iso8601 ("2020-01-02T03:04:05+05:30", NULL);
+	g_autoptr (GDateTime) modified = g_date_time_new_from_iso8601 ("2024-03-24T11:22:33Z", NULL);
+	g_assert_true (g_date_time_equal (created, pps_attachment_get_creation_datetime (binary)));
+	g_assert_true (g_date_time_equal (modified, pps_attachment_get_modification_datetime (binary)));
+	/* Payloads must be usable after the source document and worker are gone. */
+	g_clear_object (&document);
+	g_autofree char *binary_path = g_build_filename (fixture_dir, "extracted.bin", NULL);
+	g_autofree char *empty_path = g_build_filename (fixture_dir, "extracted-empty.txt", NULL);
+	g_autoptr (GFile) binary_file = g_file_new_for_path (binary_path);
+	g_autoptr (GFile) empty_file = g_file_new_for_path (empty_path);
+	g_autoptr (GError) error = NULL;
+	g_assert_true (pps_attachment_save (binary, binary_file, &error));
+	g_assert_no_error (error);
+	g_assert_true (pps_attachment_save (empty, empty_file, &error));
+	g_assert_no_error (error);
+	g_autofree char *data = NULL;
+	gsize size;
+	g_assert_true (g_file_get_contents (binary_path, &data, &size, &error));
+	g_assert_no_error (error);
+	g_assert_cmpmem (data, size, "\0\xff"
+	                             "a\0b",
+	                 5);
+	g_clear_pointer (&data, g_free);
+	g_assert_true (g_file_get_contents (empty_path, &data, &size, &error));
+	g_assert_no_error (error);
+	g_assert_cmpuint (size, ==, 0);
+	g_autoptr (PpsDocument) plain = new_document ();
+	load_document (plain, fixture_uri);
+	g_assert_false (pps_document_attachments_has_attachments (PPS_DOCUMENT_ATTACHMENTS (plain)));
+	g_assert_null (pps_document_attachments_get_attachments (PPS_DOCUMENT_ATTACHMENTS (plain)));
+	g_assert_cmpint (g_unlink (binary_path), ==, 0);
+	g_assert_cmpint (g_unlink (empty_path), ==, 0);
+	g_assert_cmpint (g_unlink (path), ==, 0);
+}
+
+static void
+attachment_batches (void)
+{
+	const guint count = 257;
+	g_autoptr (GString) names = g_string_new (NULL);
+	for (guint i = 0; i < count; i++)
+		g_string_append_printf (names, "(file%03u.txt) %u 0 R ", i, 5 + 2 * i);
+	g_autoptr (GPtrArray) objects = g_ptr_array_new_with_free_func (g_free);
+	g_ptr_array_add (objects, g_strdup_printf ("<< /Type /Catalog /Pages 2 0 R /Names << /EmbeddedFiles << /Names [%s] >> >> >>", names->str));
+	g_ptr_array_add (objects, g_strdup ("<< /Type /Pages /Count 1 /Kids [3 0 R] >>"));
+	g_ptr_array_add (objects, g_strdup ("<< /Type /Page /Parent 2 0 R /MediaBox [0 0 100 100] /Resources << >> /Contents 4 0 R >>"));
+	g_ptr_array_add (objects, g_strdup ("<< /Length 0 >>\nstream\nendstream"));
+	for (guint i = 0; i < count; i++) {
+		g_ptr_array_add (objects, g_strdup_printf ("<< /Type /Filespec /F (file%03u.txt) /EF << /F %u 0 R >> >>", i, 6 + 2 * i));
+		g_ptr_array_add (objects, g_strdup ("<< /Type /EmbeddedFile /Length 0 >>\nstream\nendstream"));
+	}
+	g_autofree char *path = write_pdf_fixture ("many-attachments.pdf", (const char *const *) objects->pdata, objects->len);
+	g_autofree char *uri = g_filename_to_uri (path, NULL, NULL);
+	g_autoptr (PpsDocument) document = new_document ();
+	load_document (document, uri);
+	g_dbus_proxy_set_default_timeout (G_DBUS_PROXY (_pps_document_proxy_get_session (document)->proxy), 5000);
+	g_autolist (PpsAttachment) attachments = pps_document_attachments_get_attachments (PPS_DOCUMENT_ATTACHMENTS (document));
+	g_assert_cmpuint (g_list_length (attachments), ==, count);
+	g_assert_cmpstr (pps_attachment_get_name (attachments->data), ==, "file000.txt");
+	g_assert_cmpstr (pps_attachment_get_name (g_list_last (attachments)->data), ==, "file256.txt");
+	g_assert_cmpint (g_unlink (path), ==, 0);
+}
+
+static void
 layers_and_layer_actions (void)
 {
 	g_autofree char *path = create_layers_fixture ();
@@ -773,6 +870,8 @@ main (int argc, char **argv)
 	g_test_add_func ("/document-proxy/layers-and-actions", layers_and_layer_actions);
 	g_test_add_func ("/document-proxy/forms-edit-and-save", forms_edit_and_save);
 	g_test_add_func ("/document-proxy/forms-isolation-and-errors", forms_isolation_and_errors);
+	g_test_add_func ("/document-proxy/embedded-attachments", embedded_attachments);
+	g_test_add_func ("/document-proxy/attachment-batches", attachment_batches);
 	int result = g_test_run ();
 	g_unlink (fixture_path);
 	g_rmdir (fixture_dir);

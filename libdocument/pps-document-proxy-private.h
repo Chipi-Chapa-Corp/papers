@@ -2,6 +2,7 @@
 
 #pragma once
 
+#include "pps-document-attachments.h"
 #include "pps-document-find.h"
 #include "pps-document-forms.h"
 #include "pps-document-layers.h"
@@ -43,3 +44,4 @@ void _pps_document_proxy_selection_iface_init (PpsSelectionInterface *iface);
 void _pps_document_proxy_links_iface_init (PpsDocumentLinksInterface *iface);
 void _pps_document_proxy_layers_iface_init (PpsDocumentLayersInterface *iface);
 void _pps_document_proxy_forms_iface_init (PpsDocumentFormsInterface *iface);
+void _pps_document_proxy_attachments_iface_init (PpsDocumentAttachmentsInterface *iface);

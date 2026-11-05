@@ -94,6 +94,12 @@ load_fd (void)
 	handle = g_unix_fd_list_append (fd_list, fd, &error);
 	close (fd);
 	g_assert_no_error (error);
+	g_assert_false (pps_dbus_document_call_load_fd_sync (
+	    session->proxy, g_variant_new_handle (handle + 1), "",
+	    G_DBUS_CALL_FLAGS_NONE, 5000, fd_list,
+	    &n_pages, NULL, NULL, &error));
+	g_assert_error (error, G_IO_ERROR, G_IO_ERROR_INVALID_ARGUMENT);
+	g_clear_error (&error);
 	g_assert_true (pps_dbus_document_call_load_fd_sync (
 	    session->proxy, g_variant_new_handle (handle), "",
 	    G_DBUS_CALL_FLAGS_NONE, 5000, fd_list,

@@ -114,10 +114,11 @@ load_document_fd (PpsDBusDocument *interface,
 
 	if (!prepare_load (worker, password, invocation))
 		return TRUE;
-	if (!fd_list) {
+	if (!fd_list || g_variant_get_handle (handle) < 0 ||
+	    g_variant_get_handle (handle) >= g_unix_fd_list_get_length (fd_list)) {
 		g_dbus_method_invocation_return_error_literal (
 		    invocation, G_IO_ERROR, G_IO_ERROR_INVALID_ARGUMENT,
-		    "No document file descriptor was supplied");
+		    "Invalid document file descriptor");
 		return TRUE;
 	}
 	fd = g_unix_fd_list_get (fd_list, g_variant_get_handle (handle), &error);

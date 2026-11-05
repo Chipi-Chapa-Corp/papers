@@ -28,7 +28,7 @@ get_attachments (PpsDocumentAttachments *document)
 		                                                  NULL, &more, &values, &descriptors, NULL, &error))
 			return NULL;
 		gsize count = g_variant_n_children (values);
-		if (count > PPS_DOCUMENT_ATTACHMENTS_BATCH_SIZE || (more && !count) || count > G_MAXUINT - offset)
+		if (count > PPS_DOCUMENT_BUFFER_BATCH_SIZE || (more && !count) || count > G_MAXUINT - offset)
 			return NULL;
 		for (gsize i = 0; i < count; i++) {
 			g_autoptr (GVariant) value = g_variant_get_child_value (values, i);

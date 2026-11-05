@@ -12,6 +12,8 @@
  * cannot change the worker's result or another consumer's image.
  */
 #define PPS_DOCUMENT_BUFFER_TYPE G_VARIANT_TYPE ("(hiiiidddd)")
+/* Keep descriptor batches below the per-message ancillary-data limit. */
+#define PPS_DOCUMENT_BUFFER_BATCH_SIZE 16
 
 PPS_PRIVATE
 int _pps_document_bytes_to_buffer (GBytes *bytes, GUnixFDList *fd_list, GError **error);

@@ -20,7 +20,7 @@ get_attachments (PpsDBusDocument *interface, GDBusMethodInvocation *invocation, 
 		    invocation, G_IO_ERROR, G_IO_ERROR_INVALID_ARGUMENT, "Invalid document attachment offset");
 		return TRUE;
 	}
-	guint end = start + MIN (PPS_DOCUMENT_ATTACHMENTS_BATCH_SIZE, worker->attachments->len - start);
+	guint end = start + MIN (PPS_DOCUMENT_BUFFER_BATCH_SIZE, worker->attachments->len - start);
 	g_autoptr (GUnixFDList) descriptors = g_unix_fd_list_new ();
 	g_autoptr (GError) error = NULL;
 	GVariantBuilder builder;

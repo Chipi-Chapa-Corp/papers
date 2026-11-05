@@ -40,6 +40,15 @@
       <arg name="present" type="b" direction="out"/>
       <arg name="rows" type="a(iba{sv})" direction="out"/>
     </method>
+    <method name="ScanFonts"/>
+    <method name="GetFonts">
+      <arg name="present" type="b" direction="out"/>
+      <arg name="fonts" type="aa{sv}" direction="out"/>
+    </method>
+    <method name="GetFontsSummary">
+      <arg name="present" type="b" direction="out"/>
+      <arg name="summary" type="s" direction="out"/>
+    </method>
     <method name="GetAttachments">
       <annotation name="org.gtk.GDBus.C.UnixFD" value="true"/>
       <arg name="start" type="u" direction="in"/>

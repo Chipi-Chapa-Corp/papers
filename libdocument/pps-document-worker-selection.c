@@ -19,15 +19,11 @@ read_points (guint style, GVariant *value, PpsRectangle *points, GDBusMethodInvo
 static gboolean
 read_color (GVariant *value, GdkRGBA *color, GDBusMethodInvocation *invocation)
 {
-	double r, g, b, a;
-	g_variant_get (value, "(dddd)", &r, &g, &b, &a);
-	if (!isfinite (r) || !isfinite (g) || !isfinite (b) || !isfinite (a) ||
-	    fabs (r) > G_MAXFLOAT || fabs (g) > G_MAXFLOAT || fabs (b) > G_MAXFLOAT || fabs (a) > G_MAXFLOAT) {
+	if (!_pps_rgba_from_variant (value, color)) {
 		g_dbus_method_invocation_return_error_literal (
 		    invocation, G_IO_ERROR, G_IO_ERROR_INVALID_ARGUMENT, "Invalid selection color");
 		return FALSE;
 	}
-	*color = (GdkRGBA){ r, g, b, a };
 	return TRUE;
 }
 

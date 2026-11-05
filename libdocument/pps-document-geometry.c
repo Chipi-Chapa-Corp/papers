@@ -4,6 +4,26 @@
 
 #include "pps-document-geometry-private.h"
 
+GVariant *
+_pps_rgba_to_variant (const GdkRGBA *color)
+{
+	return g_variant_new ("(dddd)", (double) color->red, (double) color->green, (double) color->blue, (double) color->alpha);
+}
+
+gboolean
+_pps_rgba_from_variant (GVariant *value, GdkRGBA *color)
+{
+	double r, g, b, a;
+	if (!g_variant_is_of_type (value, G_VARIANT_TYPE ("(dddd)")))
+		return FALSE;
+	g_variant_get (value, "(dddd)", &r, &g, &b, &a);
+	if (!isfinite (r) || !isfinite (g) || !isfinite (b) || !isfinite (a) ||
+	    fabs (r) > G_MAXFLOAT || fabs (g) > G_MAXFLOAT || fabs (b) > G_MAXFLOAT || fabs (a) > G_MAXFLOAT)
+		return FALSE;
+	*color = (GdkRGBA){ r, g, b, a };
+	return TRUE;
+}
+
 gboolean
 _pps_rectangle_from_variant (GVariant *value, PpsRectangle *area)
 {

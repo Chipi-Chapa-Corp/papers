@@ -69,6 +69,21 @@ invalid_geometry (void)
 	g_assert_error (error, G_IO_ERROR, G_IO_ERROR_INVALID_DATA);
 }
 
+static void
+colors (void)
+{
+	GdkRGBA original = { .2, .4, .6, .8 }, copy;
+	g_autoptr (GVariant) value = g_variant_ref_sink (_pps_rgba_to_variant (&original));
+	g_assert_true (_pps_rgba_from_variant (value, &copy));
+	g_assert_true (gdk_rgba_equal (&original, &copy));
+	GVariant *invalid[] = { g_variant_new_boolean (TRUE), g_variant_new ("(dddd)", NAN, 0., 0., 1.),
+		                g_variant_new ("(dddd)", 0., 0., 0., INFINITY), g_variant_new ("(dddd)", G_MAXDOUBLE, 0., 0., 1.) };
+	for (guint i = 0; i < G_N_ELEMENTS (invalid); i++) {
+		g_autoptr (GVariant) owned = g_variant_ref_sink (invalid[i]);
+		g_assert_false (_pps_rgba_from_variant (owned, &copy));
+	}
+}
+
 int
 main (int argc, char **argv)
 {
@@ -77,5 +92,6 @@ main (int argc, char **argv)
 	g_test_add_func ("/document-geometry/regions", regions);
 	g_test_add_func ("/document-geometry/invalid", invalid_geometry);
 	g_test_add_func ("/document-geometry/destination-right", destination_right_property);
+	g_test_add_func ("/document-geometry/colors", colors);
 	return g_test_run ();
 }

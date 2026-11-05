@@ -243,6 +243,33 @@ signing_errors (void)
 }
 
 static void
+invalid_signing_inputs (void)
+{
+	g_autoptr (PpsDocument) document = open_document (source_path);
+	g_autoptr (PpsCertificateInfo) missing = g_object_new (PPS_TYPE_CERTIFICATE_INFO, "id", "missing-certificate", NULL);
+	g_autofree char *path = g_build_filename (fixture_dir, "invalid.pdf", NULL);
+	for (guint i = 0; i < 6; i++) {
+		g_autoptr (PpsSignature) signature = new_signature (i == 0 ? NULL : missing, path);
+		if (i == 1)
+			pps_signature_set_destination_file (signature, NULL);
+		if (i == 2) {
+			g_clear_object (&signature);
+			signature = pps_signature_new (PPS_SIGNATURE_STATUS_INVALID, missing);
+			pps_signature_set_destination_file (signature, path);
+		}
+		if (i == 3)
+			pps_signature_set_page (signature, 1);
+		if (i == 4)
+			pps_signature_set_page (signature, G_MAXUINT);
+		g_autoptr (GError) error = NULL;
+		g_assert_false (sign_document (document, signature, NULL, &error));
+		GIOErrorEnum expected = i == 5 ? G_IO_ERROR_NOT_FOUND : G_IO_ERROR_INVALID_ARGUMENT;
+		g_assert_error (error, G_IO_ERROR, expected);
+		g_assert_false (g_file_test (path, G_FILE_TEST_EXISTS));
+	}
+}
+
+static void
 run_command (const char *const *argv)
 {
 	g_autoptr (GError) error = NULL;
@@ -319,6 +346,7 @@ main (int argc, char **argv)
 	pps_init ();
 	g_test_add_func ("/document-signatures/sign-and-verify", sign_and_verify);
 	g_test_add_func ("/document-signatures/errors", signing_errors);
+	g_test_add_func ("/document-signatures/invalid-inputs", invalid_signing_inputs);
 	g_test_add_func ("/document-signatures/worker-signed-and-tampered", worker_signatures);
 	g_test_add_func ("/document-signatures/worker-unsigned", worker_unsigned);
 	int result = g_test_run ();

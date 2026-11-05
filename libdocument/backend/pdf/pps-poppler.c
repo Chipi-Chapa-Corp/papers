@@ -4490,21 +4490,32 @@ pdf_document_signatures_sign (PpsDocumentSignatures *document,
 	g_autoptr (PopplerSigningData) signing_data = poppler_signing_data_new ();
 	g_autoptr (PopplerCertificateInfo) cert_info = NULL;
 	g_autoptr (PpsCertificateInfo) cinfo = NULL;
-	g_autoptr (GTask) task = NULL;
+	g_autoptr (GTask) task = g_task_new (document, cancellable, callback, user_data);
 	g_autofree gchar *uuid = NULL;
 	PopplerRectangle signing_rect;
-	PpsRectangle *rect;
-	g_autoptr (PpsPage) page = pps_document_get_page (PPS_DOCUMENT (document),
-	                                                  pps_signature_get_page (signature));
+	PpsRectangle *rect = pps_signature_get_rect (signature);
+	g_autoptr (PpsPage) page = NULL;
 	PopplerColor color;
 	GdkRGBA rgba;
 
-	g_rw_lock_writer_lock (&self->rwlock);
-
-	uuid = g_uuid_string_random ();
+	if (g_task_return_error_if_cancelled (task))
+		return;
 	g_object_get (signature, "certificate-info", &cinfo, NULL);
+	if (!cinfo || !rect || !pps_signature_get_destination_file (signature) ||
+	    !*pps_signature_get_destination_file (signature) ||
+	    pps_signature_get_page (signature) < 0 ||
+	    pps_signature_get_page (signature) >= pps_document_get_n_pages (PPS_DOCUMENT (document))) {
+		g_task_return_new_error (task, G_IO_ERROR, G_IO_ERROR_INVALID_ARGUMENT, "Invalid document signing data");
+		return;
+	}
 	cert_info = find_poppler_certificate_info (cinfo);
-	g_assert (cert_info);
+	if (!cert_info) {
+		g_task_return_new_error (task, G_IO_ERROR, G_IO_ERROR_NOT_FOUND, "Signing certificate is not available");
+		return;
+	}
+	page = pps_document_get_page (PPS_DOCUMENT (document), pps_signature_get_page (signature));
+	uuid = g_uuid_string_random ();
+	g_rw_lock_writer_lock (&self->rwlock);
 
 	poppler_signing_data_set_certificate_info (signing_data, cert_info);
 	poppler_signing_data_set_page (signing_data, pps_signature_get_page (signature));
@@ -4540,12 +4551,9 @@ pdf_document_signatures_sign (PpsDocumentSignatures *document,
 	if (pps_signature_get_user_password (signature))
 		poppler_signing_data_set_document_user_password (signing_data, pps_signature_get_user_password (signature));
 
-	rect = pps_signature_get_rect (signature);
 	signing_rect = pps_rect_to_poppler (page, rect);
 
 	poppler_signing_data_set_signature_rectangle (signing_data, &signing_rect);
-
-	task = g_task_new (document, cancellable, callback, user_data);
 
 	poppler_document_sign (POPPLER_DOCUMENT (self->document), signing_data,
 	                       cancellable, poppler_sign_callback_wrapper,

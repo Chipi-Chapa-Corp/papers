@@ -3744,8 +3744,6 @@ pdf_document_annotations_add_annotation (PpsDocumentAnnotations *document_annota
 
 		poppler_annot_set_border_width (poppler_annot, pps_annotation_get_border_width (annot));
 
-		poppler_annot_set_contents (poppler_annot, pps_annotation_get_contents (annot));
-
 		gdk_rgba_to_poppler_color (font_rgba, &poppler_color);
 		poppler_annot_free_text_set_font_color (POPPLER_ANNOT_FREE_TEXT (poppler_annot), &poppler_color);
 	} break;
@@ -3808,6 +3806,7 @@ pdf_document_annotations_add_annotation (PpsDocumentAnnotations *document_annota
 	}
 
 	annot_color_set (annot, poppler_annot);
+	poppler_annot_set_contents (poppler_annot, pps_annotation_get_contents (annot));
 	poppler_annot_set_flags (poppler_annot,
 	                         poppler_annot_get_flags (poppler_annot) | POPPLER_ANNOT_FLAG_PRINT);
 

@@ -198,20 +198,10 @@ mod imp {
             }
         }
 
-        pub(super) fn open_copy(
-            &self,
-            metadata: Option<&papers_view::Metadata>,
-            dest: Option<&LinkDest>,
-            display_name: &str,
-            edit_name: &str,
-        ) {
+        pub(super) fn open_copy(&self, source: &PpsDocumentView, dest: Option<&LinkDest>) {
             let win = super::PpsWindow::new();
             let imp = win.imp();
-            let document = self.document_view.model().document().unwrap();
-
-            imp.document_view.set_filenames(display_name, edit_name);
-            imp.document_view
-                .open_document(&document, metadata, dest, WindowRunMode::Normal);
+            imp.document_view.open_copy_from(source, dest);
             imp.set_mode(WindowRunMode::Normal);
 
             win.set_default_size(self.obj().width(), self.obj().height());
@@ -1159,6 +1149,11 @@ mod imp {
     #[gtk::template_callbacks]
     impl PpsWindow {
         #[template_callback]
+        fn document_view_open_copy(&self, dest: Option<LinkDest>, source: &PpsDocumentView) {
+            self.open_copy(source, dest.as_ref());
+        }
+
+        #[template_callback]
         fn document_view_close_finished(&self, allowed: bool) {
             if allowed {
                 self.obj().destroy();
@@ -1325,17 +1320,6 @@ impl PpsWindow {
 
     pub fn print_range(&self, first_page: i32, last_page: i32) {
         self.imp().document_view.print_range(first_page, last_page);
-    }
-
-    pub fn open_copy(
-        &self,
-        metadata: Option<&papers_view::Metadata>,
-        dest: Option<&LinkDest>,
-        display_name: &str,
-        edit_name: &str,
-    ) {
-        self.imp()
-            .open_copy(metadata, dest, display_name, edit_name);
     }
 }
 

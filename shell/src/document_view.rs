@@ -271,6 +271,9 @@ mod imp {
                     Signal::builder("close-finished")
                         .param_types([bool::static_type()])
                         .build(),
+                    Signal::builder("open-copy")
+                        .param_types([LinkDest::static_type()])
+                        .build(),
                 ]
             })
         }
@@ -908,10 +911,7 @@ glib::wrapper! {
 
 impl PpsDocumentView {
     pub fn new() -> Self {
-        glib::Object::builder()
-            .property("application", gio::Application::default())
-            .property("show-menubar", false)
-            .build()
+        glib::Object::new()
     }
 
     pub fn uri(&self) -> Option<String> {
@@ -968,6 +968,20 @@ impl PpsDocumentView {
 
     pub fn reload_document(&self, document: Option<&Document>) {
         self.imp().reload_document(document);
+    }
+
+    pub fn open_copy_from(&self, source: &Self, dest: Option<&LinkDest>) {
+        let source_imp = source.imp();
+        self.set_filenames(
+            &source_imp.display_name.borrow(),
+            &source_imp.edit_name.borrow(),
+        );
+        self.open_document(
+            &source.model().document().unwrap(),
+            source.metadata().as_ref(),
+            dest,
+            WindowRunMode::Normal,
+        );
     }
 
     pub fn error_message(&self, error: Option<&glib::Error>, msg: &str) {

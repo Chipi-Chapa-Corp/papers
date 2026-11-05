@@ -6,7 +6,7 @@ fn closing_reports_the_result_without_destroying_the_container() {
         let app = PpsApplication::new();
         app.register(gio::Cancellable::NONE).unwrap();
 
-        let view: PpsDocumentView = glib::Object::new();
+        let view = PpsDocumentView::new();
         let window = adw::Window::builder()
             .title("Container")
             .content(&view)
@@ -45,6 +45,14 @@ fn closing_reports_the_result_without_destroying_the_container() {
         assert_eq!(view.title(), "utf16le-annot.pdf");
         assert_eq!(window.title().as_deref(), Some("Container"));
         assert!(!view.modified());
+
+        let copy = PpsDocumentView::new();
+        let copy_window = adw::Window::builder().content(&copy).build();
+        copy.open_copy_from(&view, None);
+        assert_eq!(copy.model().document(), Some(document.clone()));
+        copy.model().set_scale(1.75);
+        assert_ne!(copy.model().scale(), view.model().scale());
+        copy_window.destroy();
 
         let annotation = AnnotationText::new(&document.page(0).unwrap());
         document

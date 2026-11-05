@@ -107,6 +107,7 @@ template $PpsWindow: Adw.ApplicationWindow {
 
         child: $PpsDocumentView document_view {
           close-finished => $document_view_close_finished() swapped;
+          open-copy => $document_view_open_copy() swapped;
         };
       }
 

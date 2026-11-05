@@ -91,15 +91,8 @@ impl imp::PpsDocumentView {
     }
 
     pub(super) fn open_copy_at_dest(&self, dest: Option<&LinkDest>) {
-        self.parent_window()
-            .downcast::<PpsWindow>()
-            .unwrap()
-            .open_copy(
-                self.metadata().as_ref(),
-                dest,
-                self.display_name.borrow().as_str(),
-                self.edit_name.borrow().as_str(),
-            );
+        self.obj()
+            .emit_by_name::<()>("open-copy", &[&dest.cloned()]);
     }
 
     pub(super) fn document_modified(&self) {

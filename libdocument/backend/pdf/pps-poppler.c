@@ -36,7 +36,7 @@
 #include "pps-document-signatures.h"
 #include "pps-document-text.h"
 #include "pps-document-transition.h"
-#include "pps-file-exporter.h"
+#include "pps-file-exporter-private.h"
 #include "pps-file-helpers.h"
 #include "pps-font-description.h"
 #include "pps-form-field-private.h"
@@ -1834,6 +1834,18 @@ pdf_document_file_exporter_end (PpsFileExporter *exporter)
 {
 	PdfDocument *self = PDF_DOCUMENT (exporter);
 
+#ifdef HAVE_CAIRO_PRINT
+	if (self->print_ctx && self->print_ctx->cr) {
+		cairo_t *cr = self->print_ctx->cr;
+		cairo_surface_t *surface = cairo_get_target (cr);
+		cairo_surface_finish (surface);
+		cairo_status_t status = cairo_status (cr);
+		if (status == CAIRO_STATUS_SUCCESS)
+			status = cairo_surface_status (surface);
+		if (status != CAIRO_STATUS_SUCCESS)
+			_pps_file_exporter_take_error (exporter, g_error_new_literal (G_IO_ERROR, G_IO_ERROR_FAILED, cairo_status_to_string (status)));
+	}
+#endif
 	pdf_print_context_free (self->print_ctx);
 	self->print_ctx = NULL;
 }

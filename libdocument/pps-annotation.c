@@ -1863,7 +1863,7 @@ pps_annotation_free_text_get_property (GObject *object,
 		g_value_set_boxed (value, &priv->font_rgba);
 		break;
 	case PROP_FREE_TEXT_FONT_DESC:
-		g_value_set_boxed (value, &priv->font_desc);
+		g_value_set_boxed (value, priv->font_desc);
 		break;
 	default:
 		G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);

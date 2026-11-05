@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
+#include "pps-annotation.h"
 #include "pps-document-objects-private.h"
 #include "pps-layer.h"
 #include "pps-link.h"
@@ -116,6 +117,22 @@ owned_lifetime (void)
 	g_weak_ref_clear (&weak);
 }
 
+static void
+free_text_font_property (void)
+{
+	g_autoptr (PpsPage) page = pps_page_new (0);
+	g_autoptr (PpsAnnotation) annotation = pps_annotation_free_text_new (page);
+	g_autoptr (PangoFontDescription) font = pango_font_description_from_string ("Serif Bold Italic 14");
+	g_autoptr (PangoFontDescription) copy = NULL;
+	g_object_set (annotation, "font-desc", font, NULL);
+	g_object_get (annotation, "font-desc", &copy, NULL);
+	g_assert_nonnull (copy);
+	g_assert_true (pango_font_description_equal (font, copy));
+	/* Boxed property reads own their copy, independently of the annotation. */
+	g_clear_object (&annotation);
+	g_assert_cmpstr (pango_font_description_get_family (copy), ==, "Serif");
+}
+
 int
 main (int argc, char **argv)
 {
@@ -125,5 +142,6 @@ main (int argc, char **argv)
 	g_test_add_func ("/document-objects/concurrent-identity", concurrent_identity);
 	g_test_add_func ("/document-objects/layer-title-lifetime", layer_title_lifetime);
 	g_test_add_func ("/document-objects/bound-wrapper-lifetime", bound_wrapper_lifetime);
+	g_test_add_func ("/document-objects/free-text-font-property", free_text_font_property);
 	return g_test_run ();
 }

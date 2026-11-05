@@ -133,6 +133,18 @@ Adw.AlertDialog error_alert {
 menu app_menu {
   section {
     item {
+      label: _("New _Tab");
+      action: "win.new-tab";
+    }
+
+    item {
+      label: _("New _Window");
+      action: "app.new";
+    }
+  }
+
+  section {
+    item {
       label: _("_Keyboard Shortcuts");
       action: "app.shortcuts";
     }

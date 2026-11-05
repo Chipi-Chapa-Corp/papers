@@ -22,6 +22,12 @@ template $PpsWindow: Adw.ApplicationWindow {
     [top]
     Adw.TabBar tab_bar {
       view: tabs;
+
+      start-action-widget: Button {
+        icon-name: "tab-new-symbolic";
+        action-name: "win.new-tab";
+        tooltip-text: _("New Tab");
+      };
     }
 
     content: Adw.TabView tabs {};

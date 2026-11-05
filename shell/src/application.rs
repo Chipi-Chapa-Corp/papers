@@ -369,6 +369,8 @@ mod imp {
             obj.set_accels_for_action("app.new", &["<Ctrl>N"]);
             obj.set_accels_for_action("app.quit", &["<Ctrl>Q"]);
 
+            obj.set_accels_for_action("win.new-tab", &["<Ctrl>T"]);
+            obj.set_accels_for_action("win.close-window", &["<Ctrl><Shift>W"]);
             obj.set_accels_for_action("win.open", &["<Ctrl>O"]);
             obj.set_accels_for_action("win.close", &["<Ctrl>W"]);
             obj.set_accels_for_action("win.fullscreen", &["F11"]);

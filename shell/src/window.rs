@@ -7,7 +7,6 @@ use glib::UserDirectory;
 
 use papers_document::LinkDest;
 
-use crate::application::spawn;
 use crate::config::PROFILE;
 
 #[cfg(test)]
@@ -92,6 +91,24 @@ mod imp {
     impl PpsWindow {
         fn setup_actions(&self) {
             let actions = [
+                gio::ActionEntryBuilder::new("new-tab")
+                    .activate(glib::clone!(
+                        #[weak(rename_to = obj)]
+                        self,
+                        move |_, _, _| {
+                            obj.new_tab();
+                        }
+                    ))
+                    .build(),
+                gio::ActionEntryBuilder::new("close-window")
+                    .activate(glib::clone!(
+                        #[weak(rename_to = obj)]
+                        self,
+                        move |_, _, _| {
+                            obj.obj().close();
+                        }
+                    ))
+                    .build(),
                 gio::ActionEntryBuilder::new("open")
                     .activate(glib::clone!(
                         #[weak(rename_to = obj)]
@@ -293,13 +310,7 @@ mod imp {
 
                     for f in files.iter::<gio::File>() {
                         let f = f.unwrap();
-                        let uri = f.uri();
-
-                        if obj.obj().uri().is_some_and(|u| u != uri) {
-                            spawn(Some(&f), None, None);
-                        } else {
-                            obj.open(&f, None, None);
-                        }
+                        obj.open(&f, None, None);
                     }
 
                     if files.n_items() > 0 {
@@ -523,19 +534,7 @@ mod imp {
             };
 
             for file in file_list.files() {
-                let uri = file.uri();
-                let current_uri = self.current_tab().and_then(|tab| tab.uri());
-
-                // Only open the file if we don't have an uri, or if it's
-                // different to our current one. Don't reload the current open
-                // document!
-                if let Some(current_uri) = current_uri {
-                    if current_uri != uri {
-                        crate::application::spawn(Some(&file), None, None);
-                    }
-                } else {
-                    self.open(&file, None, None);
-                }
+                self.open(&file, None, None);
             }
 
             true

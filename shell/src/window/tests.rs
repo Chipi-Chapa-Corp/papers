@@ -54,6 +54,55 @@ fn repeated_open_requests_keep_the_document_and_apply_the_requested_mode() {
 }
 
 #[test]
+fn file_drops_and_tab_actions_use_the_same_document_pages() {
+    crate::tests::run(|| {
+        let window = PpsWindow::new();
+        window.present();
+        WidgetExt::activate_action(&window, "win.new-tab", None).unwrap();
+        assert_eq!(window.imp().tabs.n_pages(), 1);
+        let target = window
+            .observe_controllers()
+            .iter::<glib::Object>()
+            .flatten()
+            .find_map(|controller| controller.downcast::<gtk::DropTarget>().ok())
+            .unwrap();
+        let files = gdk::FileList::from_array(&[
+            fixture("utf16le-annot.pdf"),
+            fixture("ink_annotations.pdf"),
+            fixture("utf16le-annot.pdf"),
+        ]);
+        assert!(target.emit_by_name::<bool>(
+            "drop",
+            &[&glib::BoxedValue(files.to_value()), &0.0f64, &0.0f64],
+        ));
+        assert_eq!(window.imp().tabs.n_pages(), 2);
+        wait_until("dropped documents", || {
+            window
+                .imp()
+                .tabs
+                .pages()
+                .iter::<adw::TabPage>()
+                .all(|page| {
+                    page.unwrap()
+                        .child()
+                        .downcast::<PpsDocumentTab>()
+                        .unwrap()
+                        .document()
+                        .is_some()
+                })
+        });
+        assert_eq!(window.title().as_deref(), Some("utf16le-annot.pdf"));
+
+        WidgetExt::activate_action(&window, "win.new-tab", None).unwrap();
+        assert_eq!(window.imp().tabs.n_pages(), 3);
+        WidgetExt::activate_action(&window, "win.close", None).unwrap();
+        assert_eq!(window.imp().tabs.n_pages(), 2);
+        WidgetExt::activate_action(&window, "win.close-window", None).unwrap();
+        wait_until("window close", || !window.is_visible());
+    });
+}
+
+#[test]
 fn tabs_reorder_transfer_and_close_through_their_current_window() {
     crate::tests::run(|| {
         let window = PpsWindow::new();

@@ -6,6 +6,16 @@ Adw.ShortcutsDialog shortcuts_dialog {
     title: C_("shortcut window", "File");
 
     Adw.ShortcutsItem {
+      title: C_("shortcut window", "New Tab");
+      action-name: "win.new-tab";
+    }
+
+    Adw.ShortcutsItem {
+      title: C_("shortcut window", "Switch Tabs");
+      accelerator: "<Ctrl>Tab <Ctrl><Shift>Tab";
+    }
+
+    Adw.ShortcutsItem {
       title: C_("shortcut window", "Open Document");
       action-name: "win.open";
     }
@@ -31,13 +41,18 @@ Adw.ShortcutsDialog shortcuts_dialog {
     }
 
     Adw.ShortcutsItem {
-      title: C_("shortcut window", "Close Current Document Window");
+      title: C_("shortcut window", "Close Current Document");
       action-name: "win.close";
     }
   }
 
   Adw.ShortcutsSection {
     title: C_("shortcut window", "Window");
+
+    Adw.ShortcutsItem {
+      title: C_("shortcut window", "Close Window");
+      action-name: "win.close-window";
+    }
 
     Adw.ShortcutsItem {
       title: C_("shortcut window", "Fullscreen");

@@ -758,7 +758,9 @@ template $PpsDocumentView: Adw.BreakpointBin {
 
 Adw.AlertDialog rect_small_alert {
   heading: _("Selection too Small");
-  body: _("A signature of this size may be too small to read. If you would like to create a potentially more readable signature, press `Start over` and draw a bigger rectangle.");
+  body: _(
+    "A signature of this size may be too small to read. If you would like to create a potentially more readable signature, press `Start over` and draw a bigger rectangle."
+  );
   follows-content-size: true;
   // https://gitlab.gnome.org/GNOME/blueprint-compiler/-/issues/195
   default-response: "cancel2";
@@ -793,6 +795,18 @@ Adw.AlertDialog error_alert {
 }
 
 menu sidebar_menu {
+  section {
+    item {
+      label: _("New _Tab");
+      action: "win.new-tab";
+    }
+
+    item {
+      label: _("New _Window");
+      action: "app.new";
+    }
+  }
+
   section {
     item {
       label: _("Open…");

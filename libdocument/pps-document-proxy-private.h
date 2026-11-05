@@ -10,6 +10,7 @@
 #include "pps-document-images.h"
 #include "pps-document-layers.h"
 #include "pps-document-links.h"
+#include "pps-document-media.h"
 #include "pps-document-objects-private.h"
 #include "pps-document-session-private.h"
 #include "pps-document-state-private.h"
@@ -55,3 +56,4 @@ void _pps_document_proxy_annotations_iface_init (PpsDocumentAnnotationsInterface
 void _pps_document_proxy_fonts_iface_init (PpsDocumentFontsInterface *iface);
 void _pps_document_proxy_images_iface_init (PpsDocumentImagesInterface *iface);
 void _pps_document_proxy_transition_iface_init (PpsDocumentTransitionInterface *iface);
+void _pps_document_proxy_media_iface_init (PpsDocumentMediaInterface *iface);

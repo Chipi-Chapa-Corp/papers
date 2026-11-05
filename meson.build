@@ -139,6 +139,7 @@ config_h.set_quoted('EXTRA_GDK_PIXBUF_LOADERS_DIR',
                     join_paths (pps_libdir, pps_name, 'gdk-pixbuf', gdk_pixbuf_dep.get_variable(pkgconfig: 'gdk_pixbuf_binary_version')))
 
 gio_dep = dependency('gio-2.0', version: glib_req_version)
+gio_unix_dep = dependency('gio-unix-2.0', version: glib_req_version)
 glib_dep = dependency('glib-2.0', version: glib_req_version)
 gmodule_dep = dependency('gmodule-2.0')
 gtk_dep = dependency(

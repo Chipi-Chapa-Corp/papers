@@ -14,6 +14,8 @@
 #include "pps-document-proxy-private.h"
 #include "pps-document-security.h"
 #include "pps-form-field-private.h"
+#include "pps-init.h"
+#include "pps-media-private.h"
 #include "pps-outlines.h"
 
 static char *fixture_dir;
@@ -1418,10 +1420,178 @@ presentation_transitions (void)
 	g_assert_cmpint (g_unlink (path), ==, 0);
 }
 
+static void
+close_media_worker (PpsDocument *document)
+{
+	PpsDocumentSession *session = _pps_document_proxy_get_session (document);
+	g_autofree char *name = g_strdup_printf ("papers-document-worker-%s", g_subprocess_get_identifier (session->process));
+	g_autofree char *directory = g_build_filename (g_get_tmp_dir (), name, NULL);
+	g_autoptr (GError) error = NULL;
+	g_assert_true (g_file_test (directory, G_FILE_TEST_IS_DIR));
+	g_assert_true (g_dbus_connection_close_sync (session->connection, NULL, &error));
+	g_assert_no_error (error);
+	g_assert_true (g_subprocess_wait_check (session->process, NULL, &error));
+	g_assert_no_error (error);
+	g_assert_false (g_file_test (directory, G_FILE_TEST_EXISTS));
+}
+
+static void
+embedded_and_external_media (void)
+{
+	const char *objects[] = {
+		"<< /Type /Catalog /Pages 2 0 R >>",
+		"<< /Type /Pages /Count 1 /Kids [3 0 R] >>",
+		"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 100 100] /Resources << >> /Contents 4 0 R /Annots [5 0 R 6 0 R 7 0 R 8 0 R] >>",
+		"<< /Length 0 >>\nstream\nendstream",
+		"<< /Type /Annot /Subtype /Movie /Rect [10 10 20 30] /Movie << /F (clip.ogg) >> /A << /ShowControls true >> >>",
+		"<< /Type /Annot /Subtype /Movie /Rect [30 10 40 30] /Movie << /F (https://example.invalid/video.ogg) >> >>",
+		"<< /Type /Annot /Subtype /Screen /Rect [50 10 60 30] /P 3 0 R /A << /S /Rendition /AN 7 0 R /OP 0 /R << /S /MR /C << /S /MCD /CT (audio/ogg) /D << /F (embedded.ogg) /EF << /F 9 0 R >> >> >> >> >> >>",
+		"<< /Type /Annot /Subtype /Screen /Rect [70 10 80 30] /P 3 0 R /A << /S /Rendition /AN 8 0 R /OP 0 /R << /S /MR /C << /S /MCD /CT (audio/ogg) /D << /F (empty.ogg) /EF << /F 10 0 R >> >> >> >> >> >>",
+		"<< /Type /EmbeddedFile /Filter /ASCIIHexDecode /Length 15 >>\nstream\n00FF6D65646961>\nendstream",
+		"<< /Type /EmbeddedFile /Length 0 >>\nstream\nendstream",
+	};
+	g_autofree char *path = write_pdf_fixture ("media.pdf", objects, G_N_ELEMENTS (objects));
+	g_autofree char *uri = g_filename_to_uri (path, NULL, NULL);
+	g_autoptr (PpsDocument) document = new_document ();
+	load_document (document, uri);
+	g_assert_true (PPS_IS_DOCUMENT_MEDIA (document));
+	g_autoptr (PpsPage) page = pps_document_get_page (document, 0);
+	PpsMappingList *mappings = pps_document_media_get_media_mapping (PPS_DOCUMENT_MEDIA (document), page);
+	PpsMappingList *again = pps_document_media_get_media_mapping (PPS_DOCUMENT_MEDIA (document), page);
+	g_assert_nonnull (mappings);
+	g_assert_cmpuint (pps_mapping_list_length (mappings), ==, 4);
+	g_assert_cmpuint (pps_mapping_list_length (again), ==, 4);
+	g_autofree char *relative_path = g_build_filename (fixture_dir, "clip.ogg", NULL);
+	g_autofree char *relative_uri = g_filename_to_uri (relative_path, NULL, NULL);
+	g_autoptr (PpsMedia) retained = NULL;
+	g_autofree char *asset_path = NULL;
+	g_autoptr (GError) error = NULL;
+	for (guint i = 0; i < 4; i++) {
+		PpsMapping *mapping = pps_mapping_list_nth (mappings, i);
+		PpsMedia *media = mapping->data;
+		PpsMedia *other = pps_mapping_list_nth (again, i)->data;
+		g_assert_true (media != other);
+		g_assert_cmpuint (pps_media_get_page_index (media), ==, 0);
+		g_assert_cmpfloat (mapping->area.x2 - mapping->area.x1, ==, 10);
+		g_assert_cmpfloat (mapping->area.y1, ==, 70);
+		g_assert_cmpfloat (mapping->area.y2, ==, 90);
+		g_assert_cmpstr (pps_media_get_uri (media), ==, pps_media_get_uri (other));
+		if (mapping->area.x1 == 10) {
+			g_assert_cmpstr (pps_media_get_uri (media), ==, relative_uri);
+			g_assert_true (pps_media_get_show_controls (media));
+			g_assert_null (_pps_media_get_temp_file (media));
+		} else if (mapping->area.x1 == 30) {
+			g_assert_cmpstr (pps_media_get_uri (media), ==, "https://example.invalid/video.ogg");
+			g_assert_false (pps_media_get_show_controls (media));
+			g_assert_null (_pps_media_get_temp_file (media));
+		} else {
+			g_assert_true (pps_media_get_show_controls (media));
+			GFile *file = _pps_media_get_temp_file (media);
+			g_assert_true (file == _pps_media_get_temp_file (other));
+			g_autoptr (GBytes) bytes = g_file_load_bytes (file, NULL, NULL, &error);
+			g_assert_no_error (error);
+			if (mapping->area.x1 == 50) {
+				g_assert_cmpmem (g_bytes_get_data (bytes, NULL), g_bytes_get_size (bytes), "\0\377media", 7);
+				g_set_object (&retained, media);
+				asset_path = g_file_get_path (file);
+			} else {
+				g_assert_cmpfloat (mapping->area.x1, ==, 70);
+				g_assert_cmpuint (g_bytes_get_size (bytes), ==, 0);
+			}
+		}
+		gboolean controls = pps_media_get_show_controls (media);
+		pps_media_set_show_controls (media, !controls);
+		g_assert_cmpint (pps_media_get_show_controls (other), ==, controls);
+	}
+	PpsDocumentSession *session = _pps_document_proxy_get_session (document);
+	g_assert_false (pps_dbus_document_call_get_media_data_sync (session->proxy, G_MAXUINT64,
+	                                                            G_DBUS_CALL_FLAGS_NONE, 5000, NULL, NULL, NULL, NULL, NULL, &error));
+	g_assert_error (error, G_IO_ERROR, G_IO_ERROR_INVALID_ARGUMENT);
+	g_clear_error (&error);
+	g_autoptr (GVariant) values = NULL;
+	g_assert_true (pps_dbus_document_call_get_media_mapping_sync (session->proxy, 0,
+	                                                              G_DBUS_CALL_FLAGS_NONE, 5000, NULL, &values, NULL, &error));
+	g_assert_no_error (error);
+	gboolean checked_external = FALSE;
+	for (gsize i = 0; i < g_variant_n_children (values); i++) {
+		g_autoptr (GVariant) item = g_variant_get_child_value (values, i);
+		g_autoptr (GVariant) value = g_variant_get_child_value (item, 1);
+		gboolean embedded;
+		g_assert_true (g_variant_lookup (value, "embedded", "b", &embedded));
+		if (!embedded) {
+			guint64 handle;
+			g_assert_true (g_variant_lookup (value, "handle", "t", &handle));
+			g_assert_false (pps_dbus_document_call_get_media_data_sync (session->proxy, handle,
+			                                                            G_DBUS_CALL_FLAGS_NONE, 5000, NULL, NULL, NULL, NULL, NULL, &error));
+			g_assert_error (error, G_IO_ERROR, G_IO_ERROR_NOT_SUPPORTED);
+			g_clear_error (&error);
+			checked_external = TRUE;
+		}
+	}
+	g_assert_true (checked_external);
+	close_media_worker (document);
+	g_clear_object (&document);
+	pps_mapping_list_unref (mappings);
+	pps_mapping_list_unref (again);
+	g_assert_true (g_file_test (asset_path, G_FILE_TEST_EXISTS));
+	g_autoptr (GBytes) bytes = g_file_load_bytes (_pps_media_get_temp_file (retained), NULL, NULL, &error);
+	g_assert_no_error (error);
+	g_assert_cmpmem (g_bytes_get_data (bytes, NULL), g_bytes_get_size (bytes), "\0\377media", 7);
+	g_clear_object (&retained);
+	g_assert_false (g_file_test (asset_path, G_FILE_TEST_EXISTS));
+	g_assert_cmpint (g_unlink (path), ==, 0);
+}
+
+static void
+many_embedded_media (void)
+{
+	const guint count = 33;
+	g_autoptr (GString) references = g_string_new (NULL);
+	for (guint i = 0; i < count; i++)
+		g_string_append_printf (references, "%u 0 R ", i + 6);
+	g_autoptr (GPtrArray) objects = g_ptr_array_new_with_free_func (g_free);
+	g_ptr_array_add (objects, g_strdup ("<< /Type /Catalog /Pages 2 0 R >>"));
+	g_ptr_array_add (objects, g_strdup ("<< /Type /Pages /Count 1 /Kids [3 0 R] >>"));
+	g_ptr_array_add (objects, g_strdup_printf ("<< /Type /Page /Parent 2 0 R /MediaBox [0 0 100 100] /Resources << >> /Contents 4 0 R /Annots [%s] >>", references->str));
+	g_ptr_array_add (objects, g_strdup ("<< /Length 0 >>\nstream\nendstream"));
+	g_ptr_array_add (objects, g_strdup ("<< /Type /EmbeddedFile /Length 5 >>\nstream\nmedia\nendstream"));
+	for (guint i = 0; i < count; i++)
+		g_ptr_array_add (objects, g_strdup_printf ("<< /Type /Annot /Subtype /Screen /Rect [10 10 30 30] /P 3 0 R /A << /S /Rendition /AN %u 0 R /OP 0 /R << /S /MR /C << /S /MCD /CT (audio/ogg) /D << /F (embedded.ogg) /EF << /F 5 0 R >> >> >> >> >> >>", i + 6));
+	g_autofree char *path = write_pdf_fixture ("many-media.pdf", (const char *const *) objects->pdata, objects->len);
+	g_autofree char *uri = g_filename_to_uri (path, NULL, NULL);
+	g_autoptr (PpsDocument) document = new_document ();
+	load_document (document, uri);
+	g_autoptr (PpsPage) page = pps_document_get_page (document, 0);
+	PpsMappingList *mappings = pps_document_media_get_media_mapping (PPS_DOCUMENT_MEDIA (document), page);
+	g_assert_nonnull (mappings);
+	g_assert_cmpuint (pps_mapping_list_length (mappings), ==, count);
+	for (guint i = 0; i < count; i++) {
+		PpsMedia *media = pps_mapping_list_nth (mappings, i)->data;
+		g_autoptr (GError) error = NULL;
+		g_autoptr (GBytes) bytes = g_file_load_bytes (_pps_media_get_temp_file (media), NULL, NULL, &error);
+		g_assert_no_error (error);
+		g_assert_cmpmem (g_bytes_get_data (bytes, NULL), g_bytes_get_size (bytes), "media", 5);
+	}
+	close_media_worker (document);
+	g_clear_object (&document);
+	pps_mapping_list_unref (mappings);
+	g_assert_cmpint (g_unlink (path), ==, 0);
+}
+
+static void
+no_media (void)
+{
+	g_autoptr (PpsDocument) document = new_document ();
+	load_document (document, fixture_uri);
+	g_autoptr (PpsPage) page = pps_document_get_page (document, 0);
+	g_assert_null (pps_document_media_get_media_mapping (PPS_DOCUMENT_MEDIA (document), page));
+}
+
 int
 main (int argc, char **argv)
 {
 	g_test_init (&argc, &argv, NULL);
+	g_assert_true (pps_init ());
 	create_fixture ();
 	g_test_add_func ("/document-proxy/metadata-and-rendering", metadata_and_rendering);
 	g_test_add_func ("/document-proxy/password-retry", password_retry);
@@ -1445,11 +1615,15 @@ main (int argc, char **argv)
 	g_test_add_func ("/document-proxy/embedded-images", embedded_images);
 	g_test_add_func ("/document-proxy/no-images", no_images);
 	g_test_add_func ("/document-proxy/presentation-transitions", presentation_transitions);
+	g_test_add_func ("/document-proxy/embedded-and-external-media", embedded_and_external_media);
+	g_test_add_func ("/document-proxy/many-embedded-media", many_embedded_media);
+	g_test_add_func ("/document-proxy/no-media", no_media);
 	int result = g_test_run ();
 	g_unlink (fixture_path);
 	g_rmdir (fixture_dir);
 	g_free (fixture_path);
 	g_free (fixture_dir);
 	g_free (fixture_uri);
+	pps_shutdown ();
 	return result;
 }

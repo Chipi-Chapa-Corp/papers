@@ -1,4 +1,4 @@
-foreach name: ['worker', 'proxy']
+foreach name: ['worker', 'proxy', 'export']
   test_executable = executable(
     'test-pps-' + name,
     'test-pps-@0@.c'.format(name),

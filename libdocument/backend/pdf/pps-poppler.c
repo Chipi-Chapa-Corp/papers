@@ -1811,6 +1811,7 @@ pdf_document_file_exporter_do_page (PpsFileExporter *exporter,
 	if (ctx->format == PPS_FILE_FORMAT_PS)
 		poppler_page_render_to_ps (poppler_page, ctx->ps_file);
 #endif /* HAVE_CAIRO_PRINT */
+	g_rw_lock_reader_unlock (&self->rwlock);
 }
 
 static void
@@ -1819,6 +1820,7 @@ pdf_document_file_exporter_end_page (PpsFileExporter *exporter)
 	PdfDocument *self = PDF_DOCUMENT (exporter);
 
 	g_return_if_fail (self->print_ctx != NULL);
+	g_rw_lock_reader_lock (&self->rwlock);
 
 #ifdef HAVE_CAIRO_PRINT
 	cairo_show_page (self->print_ctx->cr);

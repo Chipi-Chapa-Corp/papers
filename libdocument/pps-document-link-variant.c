@@ -3,6 +3,7 @@
 #include <math.h>
 
 #include "pps-document-link-private.h"
+#include "pps-document-tree-private.h"
 #include "pps-document-variant-private.h"
 
 static void
@@ -245,4 +246,81 @@ _pps_link_from_variant (GVariant *value, PpsDocumentObjects *objects, GError **e
 invalid:
 	invalid_object (error);
 	return NULL;
+}
+
+static GVariant *
+encode_outline (GObject *object, gpointer data)
+{
+	PpsOutlines *outline = PPS_OUTLINES (object);
+	g_autofree char *markup = NULL, *label = NULL;
+	GVariantBuilder builder;
+	g_object_get (outline, "markup", &markup, "label", &label, NULL);
+	g_variant_builder_init (&builder, G_VARIANT_TYPE_VARDICT);
+	_pps_variant_add_string (&builder, "markup", markup);
+	_pps_variant_add_string (&builder, "label", label);
+	g_variant_builder_add (&builder, "{sv}", "expand", g_variant_new_boolean (pps_outlines_get_expand (outline)));
+	g_variant_builder_add (&builder, "{sv}", "link", _pps_link_to_variant (pps_outlines_get_link (outline), data));
+	return g_variant_builder_end (&builder);
+}
+
+static GObject *
+decode_outline (GVariant *value, gpointer data, GError **error)
+{
+	g_autofree char *markup = NULL, *label = NULL;
+	g_autoptr (GVariant) link_value = NULL;
+	g_autoptr (PpsLink) link = NULL;
+	gboolean expand;
+	if (!_pps_variant_read_string (value, "markup", &markup) ||
+	    !_pps_variant_read_string (value, "label", &label) ||
+	    !g_variant_lookup (value, "expand", "b", &expand))
+		goto invalid;
+	link_value = g_variant_lookup_value (value, "link", G_VARIANT_TYPE_VARDICT);
+	if (!link_value)
+		goto invalid;
+	link = _pps_link_from_variant (link_value, data, error);
+	if (!link && g_variant_n_children (link_value))
+		goto invalid;
+	GObject *outline = g_object_new (PPS_TYPE_OUTLINES, "markup", markup, "label", label, "expand", expand, NULL);
+	if (link)
+		g_object_set (outline, "link", link, NULL);
+	return outline;
+invalid:
+	invalid_object (error);
+	return NULL;
+}
+
+static void
+set_outline_children (GObject *object, GListModel *children)
+{
+	pps_outlines_set_children (PPS_OUTLINES (object), children);
+}
+
+GVariant *
+_pps_outlines_to_variant (GListModel *model, PpsDocumentObjects *objects, GError **error)
+{
+	return _pps_document_tree_to_variant (model, encode_outline, objects, error);
+}
+
+GListModel *
+_pps_outlines_from_variant (GVariant *value, PpsDocumentObjects *objects, GError **error)
+{
+	return _pps_document_tree_from_variant (value, PPS_TYPE_OUTLINES, decode_outline, set_outline_children, objects, error);
+}
+
+static GObject *
+decode_layer (GVariant *value, gpointer data, GError **error)
+{
+	return G_OBJECT (_pps_layer_from_variant (value, data, error));
+}
+
+static void
+set_layer_children (GObject *object, GListModel *children)
+{
+	pps_layer_set_children (PPS_LAYER (object), children);
+}
+
+GListModel *
+_pps_layers_from_variant (GVariant *value, PpsDocumentObjects *objects, GError **error)
+{
+	return _pps_document_tree_from_variant (value, PPS_TYPE_LAYER, decode_layer, set_layer_children, objects, error);
 }

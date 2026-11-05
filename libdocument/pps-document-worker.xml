@@ -34,6 +34,35 @@
     <method name="Save">
       <arg name="uri" type="s" direction="in"/>
     </method>
+    <method name="GetOutlines">
+      <arg name="present" type="b" direction="out"/>
+      <arg name="rows" type="a(iba{sv})" direction="out"/>
+    </method>
+    <method name="GetLinks">
+      <arg name="page" type="i" direction="in"/>
+      <arg name="present" type="b" direction="out"/>
+      <arg name="mappings" type="a((dddd)a{sv})" direction="out"/>
+    </method>
+    <method name="FindLinkDest">
+      <arg name="name" type="s" direction="in"/>
+      <arg name="destination" type="a{sv}" direction="out"/>
+    </method>
+    <method name="FindLinkPage">
+      <arg name="name" type="s" direction="in"/>
+      <arg name="page" type="i" direction="out"/>
+    </method>
+    <method name="GetLayers">
+      <arg name="present" type="b" direction="out"/>
+      <arg name="rows" type="a(iba{sv})" direction="out"/>
+    </method>
+    <method name="SetLayerVisibility">
+      <arg name="layer" type="t" direction="in"/>
+      <arg name="visible" type="b" direction="in"/>
+    </method>
+    <method name="GetLayerVisibility">
+      <arg name="layer" type="t" direction="in"/>
+      <arg name="visible" type="b" direction="out"/>
+    </method>
     <method name="GetText">
       <arg name="page" type="i" direction="in"/>
       <arg name="present" type="b" direction="out"/>

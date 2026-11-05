@@ -110,7 +110,11 @@ find_text (PpsDocumentFind *document, PpsPage *page, const char *text, PpsFindOp
 static PpsFindOptions
 get_supported_options (PpsDocumentFind *document)
 {
-	return _pps_document_proxy_get_find_options (PPS_DOCUMENT (document));
+	GVariant *metadata = _pps_document_proxy_get_metadata (PPS_DOCUMENT (document));
+	guint options = 0;
+	if (metadata)
+		g_variant_lookup (metadata, "find-options", "u", &options);
+	return options;
 }
 
 void

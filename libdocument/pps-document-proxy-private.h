@@ -3,6 +3,9 @@
 #pragma once
 
 #include "pps-document-find.h"
+#include "pps-document-layers.h"
+#include "pps-document-links.h"
+#include "pps-document-objects-private.h"
 #include "pps-document-session-private.h"
 #include "pps-document-text.h"
 #include "pps-document.h"
@@ -24,8 +27,12 @@ PpsDocument *_pps_document_proxy_new (const char *mime_type,
 PPS_PRIVATE
 PpsDocumentSession *_pps_document_proxy_get_session (PpsDocument *document);
 PPS_PRIVATE
-guint _pps_document_proxy_get_find_options (PpsDocument *document);
+GVariant *_pps_document_proxy_get_metadata (PpsDocument *document);
+PPS_PRIVATE
+PpsDocumentObjects *_pps_document_proxy_get_objects (PpsDocument *document);
 
 void _pps_document_proxy_text_iface_init (PpsDocumentTextInterface *iface);
 void _pps_document_proxy_find_iface_init (PpsDocumentFindInterface *iface);
 void _pps_document_proxy_selection_iface_init (PpsSelectionInterface *iface);
+void _pps_document_proxy_links_iface_init (PpsDocumentLinksInterface *iface);
+void _pps_document_proxy_layers_iface_init (PpsDocumentLayersInterface *iface);

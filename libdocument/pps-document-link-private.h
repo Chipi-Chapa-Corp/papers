@@ -17,3 +17,9 @@ PPS_PRIVATE
 GVariant *_pps_link_to_variant (PpsLink *link, PpsDocumentObjects *objects);
 PPS_PRIVATE
 PpsLink *_pps_link_from_variant (GVariant *value, PpsDocumentObjects *objects, GError **error);
+PPS_PRIVATE
+GVariant *_pps_outlines_to_variant (GListModel *model, PpsDocumentObjects *objects, GError **error);
+PPS_PRIVATE
+GListModel *_pps_outlines_from_variant (GVariant *value, PpsDocumentObjects *objects, GError **error);
+PPS_PRIVATE
+GListModel *_pps_layers_from_variant (GVariant *value, PpsDocumentObjects *objects, GError **error);

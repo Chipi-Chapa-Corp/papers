@@ -12,12 +12,13 @@ typedef struct {
 	PpsDocumentSession *session;
 	GVariant *pages;
 	PpsDocumentInfo *info;
+	PpsDocumentObjects *objects;
+	GVariant *metadata;
 	char *backend_name;
 	char *backend_version;
 	char *password;
 	int n_pages;
 	gboolean has_security;
-	guint find_options;
 	gulong closed_handler;
 } PpsDocumentProxyPrivate;
 
@@ -37,10 +38,16 @@ _pps_document_proxy_get_session (PpsDocument *document)
 	return get_private (document)->session;
 }
 
-guint
-_pps_document_proxy_get_find_options (PpsDocument *document)
+GVariant *
+_pps_document_proxy_get_metadata (PpsDocument *document)
 {
-	return get_private (document)->find_options;
+	return get_private (document)->metadata;
+}
+
+PpsDocumentObjects *
+_pps_document_proxy_get_objects (PpsDocument *document)
+{
+	return get_private (document)->objects;
 }
 
 static gboolean
@@ -82,7 +89,7 @@ read_info (PpsDocument *document, int n_pages, GError **error)
 	priv->backend_name = g_steal_pointer (&backend_name);
 	priv->backend_version = g_steal_pointer (&backend_version);
 	priv->has_security = has_security;
-	g_variant_lookup (metadata, "find-options", "u", &priv->find_options);
+	priv->metadata = g_steal_pointer (&metadata);
 	priv->n_pages = n_pages;
 	return TRUE;
 }
@@ -260,6 +267,8 @@ finalize (GObject *object)
 	PpsDocumentProxyPrivate *priv = get_private (object);
 	g_clear_pointer (&priv->pages, g_variant_unref);
 	g_clear_pointer (&priv->info, pps_document_info_free);
+	g_clear_pointer (&priv->objects, _pps_document_objects_free);
+	g_clear_pointer (&priv->metadata, g_variant_unref);
 	g_free (priv->backend_name);
 	g_free (priv->backend_version);
 	g_free (priv->password);
@@ -291,6 +300,7 @@ pps_document_proxy_class_init (PpsDocumentProxyClass *klass)
 static void
 pps_document_proxy_init (PpsDocumentProxy *document)
 {
+	get_private (document)->objects = _pps_document_objects_new ();
 }
 
 static GType
@@ -307,6 +317,8 @@ type_for_interfaces (const char *const *interfaces)
 		{ PPS_TYPE_DOCUMENT_TEXT, (GInterfaceInitFunc) _pps_document_proxy_text_iface_init },
 		{ PPS_TYPE_DOCUMENT_FIND, (GInterfaceInitFunc) _pps_document_proxy_find_iface_init },
 		{ PPS_TYPE_SELECTION, (GInterfaceInitFunc) _pps_document_proxy_selection_iface_init },
+		{ PPS_TYPE_DOCUMENT_LINKS, (GInterfaceInitFunc) _pps_document_proxy_links_iface_init },
+		{ PPS_TYPE_DOCUMENT_LAYERS, (GInterfaceInitFunc) _pps_document_proxy_layers_iface_init },
 	};
 	for (guint i = 0; i < G_N_ELEMENTS (capabilities); i++) {
 		if (g_strv_contains (interfaces, g_type_name (capabilities[i].type)))

@@ -1,6 +1,81 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #include "pps-document-link-private.h"
+#include "pps-document-mapping-private.h"
+#include "pps-document-tree-private.h"
+
+static GVariant *
+encode_layer (GObject *object, gpointer data)
+{
+	return _pps_layer_to_variant (PPS_LAYER (object), data);
+}
+
+static void
+layer_tree_and_action_identity (void)
+{
+	g_autoptr (PpsDocumentObjects) worker = _pps_document_objects_new ();
+	g_autoptr (PpsDocumentObjects) client = _pps_document_objects_new ();
+	g_autoptr (PpsLayer) group = pps_layer_new (0);
+	g_autoptr (PpsLayer) child = pps_layer_new (7);
+	g_object_set (group, "title", "Group", "title-only", TRUE, NULL);
+	g_object_set (child, "title", "Child", "enabled", TRUE, NULL);
+	g_autoptr (GListStore) roots = g_list_store_new (PPS_TYPE_LAYER);
+	g_autoptr (GListStore) children = g_list_store_new (PPS_TYPE_LAYER);
+	g_list_store_append (roots, group);
+	g_list_store_append (children, child);
+	pps_layer_set_children (group, G_LIST_MODEL (children));
+	g_autoptr (GError) error = NULL;
+	g_autoptr (GVariant) value = g_variant_ref_sink (_pps_document_tree_to_variant (G_LIST_MODEL (roots), encode_layer, worker, &error));
+	g_assert_no_error (error);
+	g_autoptr (GListModel) copy = _pps_layers_from_variant (value, client, &error);
+	g_assert_no_error (error);
+	g_autoptr (PpsLayer) copied_group = g_list_model_get_item (copy, 0);
+	g_autoptr (PpsLayer) copied_child = g_list_model_get_item (pps_layer_get_children (copied_group), 0);
+	g_assert_cmpint (pps_layer_get_rb_group (copied_child), ==, 7);
+	g_autoptr (PpsLinkAction) action = pps_link_action_new_layers_state (g_list_append (NULL, g_object_ref (child)), NULL, NULL);
+	g_autoptr (PpsLink) link = pps_link_new (NULL, action);
+	g_autoptr (GVariant) link_value = g_variant_ref_sink (_pps_link_to_variant (link, worker));
+	g_autoptr (PpsLink) copied_link = _pps_link_from_variant (link_value, client, &error);
+	g_assert_no_error (error);
+	g_assert_true (pps_link_action_get_show_list (pps_link_get_action (copied_link))->data == copied_child);
+}
+
+typedef struct {
+	PpsDocumentObjects *objects;
+	GWeakRef *weak;
+} MappingContext;
+
+static GObject *
+decode_mapping_link (GVariant *value, gpointer data, GError **error)
+{
+	MappingContext *context = data;
+	PpsLink *link = _pps_link_from_variant (value, context->objects, error);
+	if (link)
+		g_weak_ref_set (context->weak, G_OBJECT (link));
+	return G_OBJECT (link);
+}
+
+static void
+invalid_mapping_releases_partial_result (void)
+{
+	g_autoptr (PpsDocumentObjects) worker = _pps_document_objects_new ();
+	g_autoptr (PpsDocumentObjects) client = _pps_document_objects_new ();
+	g_autoptr (PpsLinkAction) action = pps_link_action_new_external_uri ("https://example.org");
+	g_autoptr (PpsLink) link = pps_link_new (NULL, action);
+	GVariantBuilder builder;
+	g_variant_builder_init (&builder, G_VARIANT_TYPE ("a((dddd)a{sv})"));
+	g_variant_builder_add (&builder, "((dddd)@a{sv})", 0., 0., 1., 1., _pps_link_to_variant (link, worker));
+	g_variant_builder_add (&builder, "((dddd)@a{sv})", 0., 0., NAN, 1., _pps_link_to_variant (link, worker));
+	g_autoptr (GVariant) value = g_variant_ref_sink (g_variant_builder_end (&builder));
+	GWeakRef weak;
+	g_weak_ref_init (&weak, NULL);
+	MappingContext context = { client, &weak };
+	g_autoptr (GError) error = NULL;
+	g_assert_null (_pps_mapping_list_from_variant (value, 0, decode_mapping_link, &context, &error));
+	g_assert_error (error, G_IO_ERROR, G_IO_ERROR_INVALID_DATA);
+	g_assert_null (g_weak_ref_get (&weak));
+	g_weak_ref_clear (&weak);
+}
 #include <math.h>
 
 static void
@@ -100,5 +175,7 @@ main (int argc, char **argv)
 	g_test_add_func ("/document-link/destinations", destinations);
 	g_test_add_func ("/document-link/actions-and-identity", actions_and_identity);
 	g_test_add_func ("/document-link/invalid", invalid_destination_and_handle);
+	g_test_add_func ("/document-link/layer-tree-identity", layer_tree_and_action_identity);
+	g_test_add_func ("/document-link/invalid-mapping", invalid_mapping_releases_partial_result);
 	return g_test_run ();
 }

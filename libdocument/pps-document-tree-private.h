@@ -2,11 +2,10 @@
 
 #pragma once
 
+#include "pps-document-variant-private.h"
 #include "pps-macros.h"
 #include <gio/gio.h>
 
-typedef GVariant *(*PpsDocumentEncodeItem) (GObject *item, gpointer data);
-typedef GObject *(*PpsDocumentDecodeItem) (GVariant *value, gpointer data, GError **error);
 typedef void (*PpsDocumentSetChildren) (GObject *item, GListModel *children);
 
 /* Rows contain a preceding parent index (-1 for roots), a children-present flag,

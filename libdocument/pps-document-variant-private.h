@@ -3,7 +3,11 @@
 #pragma once
 
 #include "pps-macros.h"
+#include <glib-object.h>
 #include <glib.h>
+
+typedef GVariant *(*PpsDocumentEncodeItem) (GObject *item, gpointer data);
+typedef GObject *(*PpsDocumentDecodeItem) (GVariant *value, gpointer data, GError **error);
 
 PPS_PRIVATE
 void _pps_variant_add_string (GVariantBuilder *builder, const char *name, const char *value);

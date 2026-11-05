@@ -134,13 +134,12 @@ load_document_fd (PpsDBusDocument *interface,
 }
 
 gboolean
-pps_document_worker_check_page (Worker *worker, int page, GType capability, GDBusMethodInvocation *invocation)
+pps_document_worker_check_document (Worker *worker, GType capability, GDBusMethodInvocation *invocation)
 {
-	if (!worker->loaded || page < 0 ||
-	    page >= pps_document_get_n_pages (worker->document)) {
+	if (!worker->loaded) {
 		g_dbus_method_invocation_return_error_literal (
-		    invocation, G_IO_ERROR, G_IO_ERROR_INVALID_ARGUMENT,
-		    "Page is outside the loaded document");
+		    invocation, G_IO_ERROR, G_IO_ERROR_NOT_INITIALIZED,
+		    "The document is not loaded");
 		return FALSE;
 	}
 	if (capability && !g_type_is_a (G_OBJECT_TYPE (worker->document), capability)) {
@@ -150,6 +149,17 @@ pps_document_worker_check_page (Worker *worker, int page, GType capability, GDBu
 		return FALSE;
 	}
 	return TRUE;
+}
+
+gboolean
+pps_document_worker_check_page (Worker *worker, int page, GType capability, GDBusMethodInvocation *invocation)
+{
+	if (!worker->loaded || page < 0 || page >= pps_document_get_n_pages (worker->document)) {
+		g_dbus_method_invocation_return_error_literal (
+		    invocation, G_IO_ERROR, G_IO_ERROR_INVALID_ARGUMENT, "Page is outside the loaded document");
+		return FALSE;
+	}
+	return pps_document_worker_check_document (worker, capability, invocation);
 }
 
 static gboolean
@@ -203,6 +213,12 @@ get_info (PpsDBusDocument *interface,
 	if (PPS_IS_DOCUMENT_FIND (worker->document))
 		g_variant_dict_insert (&properties, "find-options", "u",
 		                       pps_document_find_get_supported_options (PPS_DOCUMENT_FIND (worker->document)));
+	if (PPS_IS_DOCUMENT_LINKS (worker->document))
+		g_variant_dict_insert (&properties, "has-document-links", "b",
+		                       pps_document_links_has_document_links (PPS_DOCUMENT_LINKS (worker->document)));
+	if (PPS_IS_DOCUMENT_LAYERS (worker->document))
+		g_variant_dict_insert (&properties, "has-layers", "b",
+		                       pps_document_layers_has_layers (PPS_DOCUMENT_LAYERS (worker->document)));
 	pps_dbus_document_complete_get_info (interface, invocation,
 	                                     g_variant_dict_end (&properties),
 	                                     g_variant_builder_end (&pages),
@@ -317,7 +333,8 @@ main (int argc, char **argv)
 	g_autoptr (PpsDBusDocument) interface = NULL;
 	g_autoptr (GMainLoop) loop = g_main_loop_new (NULL, FALSE);
 	g_autofree char *guid = g_dbus_generate_guid ();
-	Worker worker = { 0 };
+	g_autoptr (PpsDocumentObjects) objects = _pps_document_objects_new ();
+	Worker worker = { .objects = objects };
 
 	g_set_prgname ("papers-document-worker");
 	if (argc != 1)
@@ -348,6 +365,7 @@ main (int argc, char **argv)
 	g_signal_connect (interface, "handle-render", G_CALLBACK (render), &worker);
 	pps_document_worker_bind_text (&worker, interface);
 	pps_document_worker_bind_selection (&worker, interface);
+	pps_document_worker_bind_links (&worker, interface);
 	if (!g_dbus_interface_skeleton_export (G_DBUS_INTERFACE_SKELETON (interface),
 	                                       connection, PPS_DOCUMENT_WORKER_PATH, &error)) {
 		pps_shutdown ();
@@ -357,6 +375,7 @@ main (int argc, char **argv)
 	g_dbus_connection_start_message_processing (connection);
 	g_main_loop_run (loop);
 	g_dbus_interface_skeleton_unexport (G_DBUS_INTERFACE_SKELETON (interface));
+	pps_document_worker_clear_links (&worker);
 	g_clear_object (&worker.document);
 	pps_shutdown ();
 	return 0;

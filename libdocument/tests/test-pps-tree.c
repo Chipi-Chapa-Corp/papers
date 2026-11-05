@@ -86,6 +86,29 @@ invalid_parent (void)
 	g_assert_error (error, G_IO_ERROR, G_IO_ERROR_INVALID_DATA);
 }
 
+static GObject *
+decode_same_item (GVariant *value, gpointer data, GError **error)
+{
+	return g_object_ref (data);
+}
+
+static void
+decoded_identity_cycle (void)
+{
+	/* The parent indices can be valid while remote handles alias an ancestor. */
+	g_autoptr (PpsOutlines) item = g_object_new (PPS_TYPE_OUTLINES, "markup", "alias", NULL);
+	GVariantBuilder builder;
+	g_variant_builder_init (&builder, G_VARIANT_TYPE ("a(iba{sv})"));
+	g_variant_builder_add (&builder, "(ib@a{sv})", -1, TRUE, encode (G_OBJECT (item), NULL));
+	g_variant_builder_add (&builder, "(ib@a{sv})", 0, FALSE, encode (G_OBJECT (item), NULL));
+	g_autoptr (GVariant) value = g_variant_ref_sink (g_variant_builder_end (&builder));
+	g_autoptr (GError) error = NULL;
+	g_autoptr (GListModel) result = _pps_document_tree_from_variant (
+	    value, PPS_TYPE_OUTLINES, decode_same_item, set_children, item, &error);
+	g_assert_null (result);
+	g_assert_error (error, G_IO_ERROR, G_IO_ERROR_INVALID_DATA);
+}
+
 static void
 cycle (void)
 {
@@ -107,5 +130,6 @@ main (int argc, char **argv)
 	g_test_add_func ("/document-tree/deep", deep_tree);
 	g_test_add_func ("/document-tree/invalid-parent", invalid_parent);
 	g_test_add_func ("/document-tree/cycle", cycle);
+	g_test_add_func ("/document-tree/decoded-identity-cycle", decoded_identity_cycle);
 	return g_test_run ();
 }

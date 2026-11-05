@@ -1627,6 +1627,8 @@ pps_annotation_ink_finalize (GObject *object)
 		priv->ink_list = NULL;
 	}
 
+	g_clear_slist (&priv->time_list, g_free);
+
 	G_OBJECT_CLASS (pps_annotation_ink_parent_class)->finalize (object);
 }
 static void

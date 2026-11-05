@@ -41,6 +41,7 @@
 #include "pps-font-description.h"
 #include "pps-form-field-private.h"
 #include "pps-image.h"
+#include "pps-media-private.h"
 #include "pps-media.h"
 #include "pps-poppler.h"
 #include "pps-selection.h"
@@ -4010,13 +4011,6 @@ pps_media_from_poppler_movie (PpsDocument *document,
 	return media;
 }
 
-static void
-delete_temp_file (GFile *file)
-{
-	g_file_delete (file, NULL, NULL);
-	g_object_unref (file);
-}
-
 static gboolean
 media_save_to_file_callback (const gchar *buffer,
                              gsize count,
@@ -4070,9 +4064,8 @@ pps_media_from_poppler_rendition (PpsDocument *document,
 	g_free (uri);
 
 	if (is_temp_file)
-		g_object_set_data_full (G_OBJECT (media), "poppler-media-temp-file", file, (GDestroyNotify) delete_temp_file);
-	else
-		g_object_unref (file);
+		_pps_media_set_temp_file (media, file);
+	g_object_unref (file);
 
 	return media;
 }

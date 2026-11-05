@@ -4,7 +4,9 @@
 #include "pps-document-objects-private.h"
 #include "pps-layer.h"
 #include "pps-link.h"
+#include "pps-media-private.h"
 #include "pps-transition-effect.h"
+#include <glib/gstdio.h>
 
 static void
 identity_and_scope (void)
@@ -167,6 +169,34 @@ transition_rectangular_property (void)
 	g_assert_false (rectangular);
 }
 
+static void
+media_temp_file_lifetime (void)
+{
+	g_autoptr (GError) error = NULL;
+	g_autofree char *directory = g_dir_make_tmp ("papers-media-test-XXXXXX", &error);
+	g_assert_no_error (error);
+	g_autofree char *path = g_build_filename (directory, "media", NULL);
+	g_assert_true (g_file_set_contents (path, "media", -1, &error));
+	g_assert_no_error (error);
+	g_autoptr (GFile) file = g_file_new_for_path (path);
+	g_autofree char *uri = g_file_get_uri (file);
+	g_autoptr (PpsPage) page = pps_page_new (1);
+	g_autoptr (PpsMedia) first = pps_media_new_for_uri (page, uri);
+	g_autoptr (PpsMedia) second = pps_media_new_for_uri (page, uri);
+	g_assert_null (_pps_media_get_temp_file (first));
+	_pps_media_set_temp_file (first, file);
+	_pps_media_set_temp_file (first, file);
+	_pps_media_set_temp_file (second, file);
+	g_assert_true (_pps_media_get_temp_file (first) == file);
+	g_assert_true (_pps_media_get_temp_file (second) == file);
+	g_clear_object (&file);
+	g_clear_object (&first);
+	g_assert_true (g_file_test (path, G_FILE_TEST_EXISTS));
+	g_clear_object (&second);
+	g_assert_false (g_file_test (path, G_FILE_TEST_EXISTS));
+	g_assert_cmpint (g_rmdir (directory), ==, 0);
+}
+
 int
 main (int argc, char **argv)
 {
@@ -179,5 +209,6 @@ main (int argc, char **argv)
 	g_test_add_func ("/document-objects/free-text-font-property", free_text_font_property);
 	g_test_add_func ("/document-objects/stamp-surface-lifetime", stamp_surface_lifetime);
 	g_test_add_func ("/document-objects/transition-rectangular-property", transition_rectangular_property);
+	g_test_add_func ("/document-objects/media-temp-file-lifetime", media_temp_file_lifetime);
 	return g_test_run ();
 }

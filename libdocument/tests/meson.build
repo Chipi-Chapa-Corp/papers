@@ -1,4 +1,4 @@
-foreach name: ['worker', 'proxy', 'export']
+foreach name: ['worker', 'proxy', 'export', 'signatures']
   test_cflags = [
     '-DPAPERS_COMPILATION',
     '-DTESTDATADIR="@0@"'.format(join_paths(source_root, 'test-data')),

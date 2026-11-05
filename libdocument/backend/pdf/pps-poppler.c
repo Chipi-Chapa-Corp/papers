@@ -4469,7 +4469,10 @@ poppler_sign_callback_wrapper (GObject *source_object,
 	g_autoptr (GError) error = NULL;
 
 	if (!poppler_document_sign_finish (POPPLER_DOCUMENT (source_object), result, &error)) {
-		g_task_return_error (G_TASK (result), error);
+		if (error)
+			g_task_return_error (task, g_steal_pointer (&error));
+		else
+			g_task_return_new_error (task, G_IO_ERROR, G_IO_ERROR_FAILED, "Failed to sign document");
 		return;
 	}
 

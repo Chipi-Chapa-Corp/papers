@@ -52,5 +52,5 @@ if enable_gtk_unix_print
     dependencies: [libppsview_dep, gtk_unix_print_dep],
     c_args: cflags,
   )
-  test('pps-print-operation-gui', print_operation_test, suite: 'gui', is_parallel: false)
+  test('pps-print-operation-gui', print_operation_test, suite: 'gui', is_parallel: false, env: backend_env, depends: document_worker)
 endif

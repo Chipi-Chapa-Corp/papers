@@ -2,6 +2,43 @@ use super::*;
 use crate::tests::{fixture, wait_until};
 
 #[test]
+fn document_menu_moves_and_detaches_its_target_page() {
+    crate::tests::run(|| {
+        let window = PpsWindow::new();
+        window.open(&fixture("utf16le-annot.pdf"), None, None);
+        let first = window.imp().current_tab().unwrap();
+        window.open(&fixture("ink_annotations.pdf"), None, None);
+        let second = window.imp().current_tab().unwrap();
+        window.present();
+        wait_until("documents", || {
+            first.document().is_some() && second.document().is_some()
+        });
+        let document = first.document();
+        let view = window.imp().tabs.get();
+        let page = view.page(&first);
+        view.emit_by_name::<()>("setup-menu", &[&Some(page.clone())]);
+        assert!(
+            !window
+                .lookup_action("tab-move-backward")
+                .unwrap()
+                .is_enabled()
+        );
+        WidgetExt::activate_action(&window, "win.tab-move-forward", None).unwrap();
+        assert_eq!(view.nth_page(1), page);
+        assert_eq!(window.imp().current_tab(), Some(second));
+        view.emit_by_name::<()>("setup-menu", &[&Some(page.clone())]);
+        WidgetExt::activate_action(&window, "win.tab-detach", None).unwrap();
+        let destination = first.root().and_downcast::<PpsWindow>().unwrap();
+        assert_ne!(destination, window);
+        assert_eq!(first.document(), document);
+        assert_eq!(view.n_pages(), 1);
+        assert_eq!(destination.imp().tabs.n_pages(), 1);
+        window.close();
+        destination.close();
+    });
+}
+
+#[test]
 fn window_actions_follow_the_document_lifecycle() {
     crate::tests::run(|| {
         let window = PpsWindow::new();
@@ -136,7 +173,11 @@ fn vertical_tabs_share_selection_and_adapt_to_the_window_width() {
             window.imp().tab_sidebar.is_visible()
         });
 
-        let close = crate::tests::find_widget::<gtk::Button>(&window.imp().tab_list.get()).unwrap();
+        let close = crate::tests::find_widget_where::<gtk::Button>(
+            &window.imp().tab_list.get(),
+            &|button| button.icon_name().as_deref() == Some("window-close-symbolic"),
+        )
+        .unwrap();
         close.emit_clicked();
         assert_eq!(window.imp().tabs.n_pages(), 1);
         window

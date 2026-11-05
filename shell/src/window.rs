@@ -40,6 +40,7 @@ mod imp {
         pub(super) tab_list: TemplateChild<gtk::ListView>,
         pub(super) narrow: Cell<bool>,
         pub(super) selected_tab: RefCell<Option<PpsDocumentTab>>,
+        pub(super) menu_page: RefCell<Option<adw::TabPage>>,
         pub(super) selected_bindings: RefCell<Vec<glib::Binding>>,
         pub(super) closing: Cell<bool>,
         #[template_child]
@@ -131,6 +132,53 @@ mod imp {
                         self,
                         move |_, _, _| {
                             if let Some(page) = obj.tabs.selected_page() {
+                                obj.tabs.close_page(&page);
+                            }
+                        }
+                    ))
+                    .build(),
+                gio::ActionEntryBuilder::new("tab-move-backward")
+                    .activate(glib::clone!(
+                        #[weak(rename_to = obj)]
+                        self,
+                        move |_, _, _| {
+                            if let Some(page) = obj.menu_tab() {
+                                obj.tabs.reorder_backward(&page);
+                            }
+                        }
+                    ))
+                    .build(),
+                gio::ActionEntryBuilder::new("tab-move-forward")
+                    .activate(glib::clone!(
+                        #[weak(rename_to = obj)]
+                        self,
+                        move |_, _, _| {
+                            if let Some(page) = obj.menu_tab() {
+                                obj.tabs.reorder_forward(&page);
+                            }
+                        }
+                    ))
+                    .build(),
+                gio::ActionEntryBuilder::new("tab-detach")
+                    .activate(glib::clone!(
+                        #[weak(rename_to = obj)]
+                        self,
+                        move |_, _, _| {
+                            if let Some(page) = obj.menu_tab() {
+                                let window = super::PpsWindow::new();
+                                window.set_default_size(obj.obj().width(), obj.obj().height());
+                                obj.tabs.transfer_page(&page, &window.imp().tabs, 0);
+                                window.present();
+                            }
+                        }
+                    ))
+                    .build(),
+                gio::ActionEntryBuilder::new("tab-close")
+                    .activate(glib::clone!(
+                        #[weak(rename_to = obj)]
+                        self,
+                        move |_, _, _| {
+                            if let Some(page) = obj.menu_tab() {
                                 obj.tabs.close_page(&page);
                             }
                         }
@@ -338,6 +386,61 @@ mod imp {
         }
 
         fn setup_tabs(&self) {
+            let menu = gio::Menu::new();
+            for (label, action) in [
+                (gettext("Move _Left"), "win.tab-move-backward"),
+                (gettext("Move _Right"), "win.tab-move-forward"),
+                (gettext("Move to New _Window"), "win.tab-detach"),
+                (gettext("_Close Document"), "win.tab-close"),
+            ] {
+                menu.append(Some(&label), Some(action));
+            }
+            self.tabs.set_menu_model(Some(&menu));
+            self.tabs.connect_setup_menu(glib::clone!(
+                #[weak(rename_to = obj)]
+                self,
+                #[strong]
+                menu,
+                move |view, page| {
+                    obj.menu_page.replace(page.cloned());
+                    let Some(page) = page else {
+                        return;
+                    };
+                    let position = view.page_position(page);
+                    for (name, enabled) in [
+                        ("tab-move-backward", position > 0),
+                        ("tab-move-forward", position + 1 < view.n_pages()),
+                        ("tab-detach", view.n_pages() > 1),
+                    ] {
+                        obj.obj()
+                            .lookup_action(name)
+                            .and_downcast::<gio::SimpleAction>()
+                            .unwrap()
+                            .set_enabled(enabled);
+                    }
+                    let vertical = obj.settings.boolean("vertical-tabs") && !obj.narrow.get();
+                    menu.remove(1);
+                    menu.remove(0);
+                    menu.insert(
+                        0,
+                        Some(&if vertical {
+                            gettext("Move _Up")
+                        } else {
+                            gettext("Move _Left")
+                        }),
+                        Some("win.tab-move-backward"),
+                    );
+                    menu.insert(
+                        1,
+                        Some(&if vertical {
+                            gettext("Move _Down")
+                        } else {
+                            gettext("Move _Right")
+                        }),
+                        Some("win.tab-move-forward"),
+                    );
+                }
+            ));
             self.tab_list.set_model(Some(&self.tabs.pages()));
             self.tab_list
                 .set_factory(Some(&crate::tab_list::factory(&self.tabs)));
@@ -369,6 +472,7 @@ mod imp {
                 #[weak(rename_to = obj)]
                 self,
                 move |view, _, _| {
+                    obj.menu_page.take();
                     if view.n_pages() == 0 {
                         obj.obj().destroy();
                     }
@@ -379,6 +483,13 @@ mod imp {
                 window.present();
                 Some(window.imp().tabs.get())
             });
+        }
+
+        fn menu_tab(&self) -> Option<adw::TabPage> {
+            self.menu_page
+                .borrow()
+                .clone()
+                .or_else(|| self.tabs.selected_page())
         }
 
         fn selected_page_changed(&self) {

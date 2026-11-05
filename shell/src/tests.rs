@@ -37,14 +37,19 @@ pub fn fixture(name: &str) -> gio::File {
     )
 }
 
-pub fn find_widget<T: IsA<gtk::Widget>>(widget: &impl IsA<gtk::Widget>) -> Option<T> {
+pub fn find_widget_where<T: IsA<gtk::Widget>>(
+    widget: &impl IsA<gtk::Widget>,
+    predicate: &impl Fn(&T) -> bool,
+) -> Option<T> {
     let widget = widget.as_ref();
-    if let Ok(found) = widget.clone().downcast::<T>() {
+    if let Ok(found) = widget.clone().downcast::<T>()
+        && predicate(&found)
+    {
         return Some(found);
     }
     let mut child = widget.first_child();
     while let Some(widget) = child {
-        if let Some(found) = find_widget::<T>(&widget) {
+        if let Some(found) = find_widget_where::<T>(&widget, predicate) {
             return Some(found);
         }
         child = widget.next_sibling();

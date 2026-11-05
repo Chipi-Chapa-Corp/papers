@@ -43,6 +43,25 @@ pub fn factory(view: &adw::TabView) -> gtk::SignalListItemFactory {
                 .build();
             row.append(&indicator);
 
+            let menu = gtk::MenuButton::builder()
+                .icon_name("view-more-symbolic")
+                .tooltip_text(gettext("Document Actions"))
+                .css_classes(["flat"])
+                .build();
+            menu.set_menu_model(view.menu_model().as_ref());
+            menu.connect_active_notify(glib::clone!(
+                #[weak]
+                view,
+                #[weak]
+                page,
+                move |button| {
+                    if button.is_active() {
+                        view.emit_by_name::<()>("setup-menu", &[&Some(page.clone())]);
+                    }
+                }
+            ));
+            row.append(&menu);
+
             let close = gtk::Button::builder()
                 .icon_name("window-close-symbolic")
                 .tooltip_text(gettext("Close Document"))

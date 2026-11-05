@@ -1278,18 +1278,20 @@ impl imp::PpsDocumentView {
         );
     }
 
-    fn refresh_signature_previews(&self) {
+    fn refresh_signature_previews(&self) -> glib::JoinHandle<()> {
         glib::spawn_future_local(glib::clone!(
             #[weak(rename_to=obj)]
             self,
             async move {
                 let manager = obj.signature_manager.get().unwrap();
+                let signatures = manager.list_signatures().await;
+
+                // Refreshes may overlap while metadata loads. Replace the children
+                // together after awaiting so shared placeholders are added once.
                 let container = obj.signature_menu_child.get();
                 while let Some(child) = container.first_child() {
                     container.remove(&child);
                 }
-
-                let signatures = manager.list_signatures().await;
 
                 if signatures.is_empty() {
                     container.append(&obj.signature_menu_no_signature.get());
@@ -1332,7 +1334,7 @@ impl imp::PpsDocumentView {
                 }
                 container.append(&obj.signature_menu_manage_child.get());
             }
-        ));
+        ))
     }
 
     pub(super) fn update_edit_toolbar_visibility(&self, visible: bool) {
@@ -1480,5 +1482,31 @@ impl imp::PpsDocumentView {
                 }
             }
         ));
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn concurrent_signature_previews_replace_the_placeholder() {
+        crate::tests::run(|| {
+            let view = PpsDocumentView::new();
+            view.imp()
+                .signature_manager
+                .set(crate::signature_manager::PpsSignatureManager::new())
+                .unwrap();
+            let first = view.imp().refresh_signature_previews();
+            let second = view.imp().refresh_signature_previews();
+            glib::MainContext::default().block_on(async {
+                first.await.unwrap();
+                second.await.unwrap();
+            });
+            let container = view.imp().signature_menu_child.get();
+            let placeholder = view.imp().signature_menu_no_signature.get();
+            assert_eq!(container.first_child(), Some(placeholder.clone().upcast()));
+            assert_eq!(container.last_child(), Some(placeholder.upcast()));
+        });
     }
 }

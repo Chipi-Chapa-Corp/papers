@@ -199,6 +199,9 @@ failure_and_lifetime (void)
 	while (!failed && g_get_monotonic_time () < deadline)
 		g_main_context_iteration (NULL, FALSE);
 	g_assert_true (failed);
+	g_autoptr (GError) worker_error = NULL;
+	g_object_get (first, "error", &worker_error, NULL);
+	g_assert_nonnull (worker_error);
 	g_autoptr (PpsPage) page = pps_document_get_page (first, 0);
 	g_autoptr (PpsRenderContext) context = pps_render_context_new (page, 0, 1, PPS_RENDER_ANNOTS_ALL);
 	g_assert_null (pps_document_render (first, context));

@@ -9,6 +9,11 @@
 #include "pps-document-proxy-private.h"
 #include "pps-document-security.h"
 
+enum {
+	PROP_0,
+	PROP_ERROR
+};
+
 typedef struct {
 	PpsDocumentSession *session;
 	GVariant *pages;
@@ -22,6 +27,7 @@ typedef struct {
 	gboolean has_security;
 	guint state;
 	gulong closed_handler;
+	GError *error;
 } PpsDocumentProxyPrivate;
 
 G_DEFINE_ABSTRACT_TYPE_WITH_PRIVATE (PpsDocumentProxy, pps_document_proxy, PPS_TYPE_DOCUMENT)
@@ -269,7 +275,20 @@ connection_closed (GDBusConnection *connection, gboolean remote_peer_vanished, G
 		                              "The document worker exited");
 		error = closed;
 	}
+	PpsDocumentProxyPrivate *priv = get_private (document);
+	g_clear_error (&priv->error);
+	priv->error = g_error_copy (error);
+	g_object_notify (G_OBJECT (document), "error");
 	g_signal_emit (document, failed_signal, 0, error);
+}
+
+static void
+get_property (GObject *object, guint prop_id, GValue *value, GParamSpec *spec)
+{
+	if (prop_id == PROP_ERROR)
+		g_value_set_boxed (value, get_private (object)->error);
+	else
+		G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, spec);
 }
 
 static void
@@ -294,6 +313,7 @@ finalize (GObject *object)
 	g_clear_pointer (&priv->info, pps_document_info_free);
 	g_clear_pointer (&priv->objects, _pps_document_objects_free);
 	g_clear_pointer (&priv->metadata, g_variant_unref);
+	g_clear_error (&priv->error);
 	g_free (priv->backend_name);
 	g_free (priv->backend_version);
 	g_free (priv->password);
@@ -307,6 +327,10 @@ pps_document_proxy_class_init (PpsDocumentProxyClass *klass)
 	PpsDocumentClass *document_class = PPS_DOCUMENT_CLASS (klass);
 	object_class->dispose = dispose;
 	object_class->finalize = finalize;
+	object_class->get_property = get_property;
+	g_object_class_install_property (object_class, PROP_ERROR,
+	                                 g_param_spec_boxed ("error", "Error", "Terminal document worker error",
+	                                                     G_TYPE_ERROR, G_PARAM_READABLE | G_PARAM_STATIC_STRINGS));
 	document_class->load = load;
 	document_class->load_fd = load_fd;
 	document_class->save = save;

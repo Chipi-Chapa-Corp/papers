@@ -6,6 +6,7 @@
 #include "pps-document-session-private.h"
 #include "pps-document-text.h"
 #include "pps-document.h"
+#include "pps-selection.h"
 
 #define PPS_TYPE_DOCUMENT_PROXY (pps_document_proxy_get_type ())
 PPS_PRIVATE
@@ -27,3 +28,4 @@ guint _pps_document_proxy_get_find_options (PpsDocument *document);
 
 void _pps_document_proxy_text_iface_init (PpsDocumentTextInterface *iface);
 void _pps_document_proxy_find_iface_init (PpsDocumentFindInterface *iface);
+void _pps_document_proxy_selection_iface_init (PpsSelectionInterface *iface);

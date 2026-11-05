@@ -237,29 +237,16 @@ save_document (PpsDBusDocument *interface,
 	return TRUE;
 }
 
-static gboolean
-render (PpsDBusDocument *interface,
-        GDBusMethodInvocation *invocation,
-        GUnixFDList *input_fds,
-        int page_index,
-        int rotation,
-        double scale,
-        int target_width,
-        int target_height,
-        guint annotations,
-        gboolean thumbnail,
-        Worker *worker)
+PpsRenderContext *
+pps_document_worker_create_render_context (
+    Worker *worker, int page_index, GType capability, int rotation, double scale, int target_width, int target_height, guint annotations, GDBusMethodInvocation *invocation)
 {
 	g_autoptr (PpsPage) page = NULL;
-	g_autoptr (PpsRenderContext) context = NULL;
-	g_autoptr (GUnixFDList) descriptors = NULL;
-	g_autoptr (GError) error = NULL;
-	cairo_surface_t *surface;
-	GVariant *buffer;
+	PpsRenderContext *context;
 	double width, height;
 
-	if (!pps_document_worker_check_page (worker, page_index, G_TYPE_INVALID, invocation))
-		return TRUE;
+	if (!pps_document_worker_check_page (worker, page_index, capability, invocation))
+		return NULL;
 	if (rotation < 0 || rotation > 270 || rotation % 90 != 0 ||
 	    !isfinite (scale) ||
 	    !((target_width == -1 && target_height == -1 && scale > 0) ||
@@ -281,20 +268,33 @@ render (PpsDBusDocument *interface,
 	page = pps_document_get_page (worker->document, page_index);
 	context = pps_render_context_new (page, rotation, scale, annotations);
 	pps_render_context_set_target_size (context, target_width, target_height);
-	surface = thumbnail ? pps_document_get_thumbnail_surface (worker->document, context) : pps_document_render (worker->document, context);
-	buffer = _pps_document_surface_to_buffer (surface, &descriptors, &error);
+	return context;
+
+invalid:
+	g_dbus_method_invocation_return_error_literal (
+	    invocation, G_IO_ERROR, G_IO_ERROR_INVALID_ARGUMENT,
+	    "Invalid render dimensions or rotation");
+	return NULL;
+}
+
+static gboolean
+render (PpsDBusDocument *interface, GDBusMethodInvocation *invocation, GUnixFDList *input_fds, int page_index, int rotation, double scale, int target_width, int target_height, guint annotations, gboolean thumbnail, Worker *worker)
+{
+	g_autoptr (PpsRenderContext) context = pps_document_worker_create_render_context (
+	    worker, page_index, G_TYPE_INVALID, rotation, scale,
+	    target_width, target_height, annotations, invocation);
+	g_autoptr (GUnixFDList) descriptors = NULL;
+	g_autoptr (GError) error = NULL;
+	if (!context)
+		return TRUE;
+	cairo_surface_t *surface = thumbnail ? pps_document_get_thumbnail_surface (worker->document, context) : pps_document_render (worker->document, context);
+	GVariant *buffer = _pps_document_surface_to_buffer (surface, &descriptors, &error);
 	if (surface)
 		cairo_surface_destroy (surface);
 	if (!buffer)
 		g_dbus_method_invocation_return_gerror (invocation, error);
 	else
 		pps_dbus_document_complete_render (interface, invocation, descriptors, buffer);
-	return TRUE;
-
-invalid:
-	g_dbus_method_invocation_return_error_literal (
-	    invocation, G_IO_ERROR, G_IO_ERROR_INVALID_ARGUMENT,
-	    "Invalid render dimensions or rotation");
 	return TRUE;
 }
 
@@ -347,6 +347,7 @@ main (int argc, char **argv)
 	g_signal_connect (interface, "handle-save", G_CALLBACK (save_document), &worker);
 	g_signal_connect (interface, "handle-render", G_CALLBACK (render), &worker);
 	pps_document_worker_bind_text (&worker, interface);
+	pps_document_worker_bind_selection (&worker, interface);
 	if (!g_dbus_interface_skeleton_export (G_DBUS_INTERFACE_SKELETON (interface),
 	                                       connection, PPS_DOCUMENT_WORKER_PATH, &error)) {
 		pps_shutdown ();

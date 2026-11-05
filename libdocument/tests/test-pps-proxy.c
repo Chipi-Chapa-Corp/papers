@@ -228,6 +228,73 @@ text_and_find (void)
 }
 
 static void
+selection (void)
+{
+	g_autoptr (PpsDocument) document = new_document ();
+	load_document (document, fixture_uri);
+	/* Match PpsJobRenderTexture: paint the page before its selection. */
+	render_page (document, 0);
+	g_assert_true (PPS_IS_SELECTION (document));
+	PpsSelection *selection = PPS_SELECTION (document);
+	g_autoptr (PpsPage) page = pps_document_get_page (document, 0);
+	g_autoptr (PpsRenderContext) context = pps_render_context_new (page, 0, 1, PPS_RENDER_ANNOTS_ALL);
+	g_autofree PpsRectangle *areas = NULL;
+	guint count;
+	g_assert_true (pps_document_text_get_text_layout (PPS_DOCUMENT_TEXT (document), page, &areas, &count));
+	PpsRectangle points = {
+		(areas[0].x1 + areas[0].x2) / 2, (areas[0].y1 + areas[0].y2) / 2,
+		(areas[1].x1 + areas[1].x2) / 2, (areas[1].y1 + areas[1].y2) / 2
+	};
+	const char *expected[] = { "Fi", "First", "First page" };
+	for (int style = PPS_SELECTION_STYLE_GLYPH; style <= PPS_SELECTION_STYLE_LINE; style++) {
+		g_autofree char *text = pps_selection_get_selected_text (selection, page, style, &points);
+		g_assert_cmpstr (text, ==, expected[style]);
+		cairo_region_t *region = pps_selection_get_selection_region (selection, context, style, &points);
+		g_assert_nonnull (region);
+		g_assert_false (cairo_region_is_empty (region));
+		cairo_region_destroy (region);
+	}
+	GdkRGBA text_color = { 0, 0, 0, 1 };
+	GdkRGBA base_color = { .2, .4, 1, .5 };
+	cairo_surface_t *surface = NULL;
+	pps_selection_render_selection (selection, context, &surface, &points, NULL,
+	                                PPS_SELECTION_STYLE_GLYPH, &text_color, &base_color);
+	g_assert_nonnull (surface);
+	g_assert_cmpint (cairo_image_surface_get_width (surface), ==, 144);
+	g_assert_cmpint (cairo_image_surface_get_height (surface), ==, 288);
+	cairo_surface_t *original = surface;
+	pps_selection_render_selection (selection, context, &surface, &points, &points,
+	                                PPS_SELECTION_STYLE_WORD, &text_color, &base_color);
+	g_assert_true (surface == original);
+	cairo_surface_t *fresh = NULL;
+	pps_selection_render_selection (selection, context, &fresh, &points, NULL,
+	                                PPS_SELECTION_STYLE_WORD, &text_color, &base_color);
+	g_assert_nonnull (fresh);
+	cairo_surface_flush (surface);
+	cairo_surface_flush (fresh);
+	gsize size = cairo_image_surface_get_stride (surface) * 288;
+	g_assert_cmpmem (cairo_image_surface_get_data (surface), size,
+	                 cairo_image_surface_get_data (fresh), size);
+	cairo_surface_destroy (surface);
+	cairo_surface_destroy (fresh);
+	context->rotation = 90;
+	context->scale = 0;
+	pps_render_context_set_target_size (context, 160, 200);
+	surface = NULL;
+	pps_selection_render_selection (selection, context, &surface, &points, NULL,
+	                                PPS_SELECTION_STYLE_LINE, &text_color, &base_color);
+	g_assert_nonnull (surface);
+	/* Selection surfaces use unrotated page coordinates, as the native backend does. */
+	g_assert_cmpint (cairo_image_surface_get_width (surface), ==, 200);
+	g_assert_cmpint (cairo_image_surface_get_height (surface), ==, 160);
+	cairo_surface_destroy (surface);
+	g_assert_null (pps_selection_get_selected_text (selection, page, 99, &points));
+	points.x1 = NAN;
+	g_assert_null (pps_selection_get_selection_region (selection, context, PPS_SELECTION_STYLE_LINE, &points));
+	render_page (document, 1);
+}
+
+static void
 create_fixture (void)
 {
 	g_autoptr (GError) error = NULL;
@@ -273,6 +340,7 @@ main (int argc, char **argv)
 	g_test_add_func ("/document-proxy/fd-and-save", fd_and_save);
 	g_test_add_func ("/document-proxy/failure-and-lifetime", failure_and_lifetime);
 	g_test_add_func ("/document-proxy/text-and-find", text_and_find);
+	g_test_add_func ("/document-proxy/selection", selection);
 	int result = g_test_run ();
 	g_unlink (fixture_path);
 	g_rmdir (fixture_dir);

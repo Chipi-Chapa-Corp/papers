@@ -306,6 +306,7 @@ type_for_interfaces (const char *const *interfaces)
 		{ PPS_TYPE_DOCUMENT_SECURITY, (GInterfaceInitFunc) security_iface_init },
 		{ PPS_TYPE_DOCUMENT_TEXT, (GInterfaceInitFunc) _pps_document_proxy_text_iface_init },
 		{ PPS_TYPE_DOCUMENT_FIND, (GInterfaceInitFunc) _pps_document_proxy_find_iface_init },
+		{ PPS_TYPE_SELECTION, (GInterfaceInitFunc) _pps_document_proxy_selection_iface_init },
 	};
 	for (guint i = 0; i < G_N_ELEMENTS (capabilities); i++) {
 		if (g_strv_contains (interfaces, g_type_name (capabilities[i].type)))

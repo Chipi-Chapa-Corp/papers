@@ -66,6 +66,39 @@
       <arg name="options" type="u" direction="in"/>
       <arg name="matches" type="a(ddddbb)" direction="out"/>
     </method>
+    <method name="GetSelectedText">
+      <arg name="page" type="i" direction="in"/>
+      <arg name="style" type="u" direction="in"/>
+      <arg name="points" type="(dddd)" direction="in"/>
+      <arg name="present" type="b" direction="out"/>
+      <arg name="text" type="s" direction="out"/>
+    </method>
+    <method name="GetSelectionRegion">
+      <arg name="page" type="i" direction="in"/>
+      <arg name="rotation" type="i" direction="in"/>
+      <arg name="scale" type="d" direction="in"/>
+      <arg name="target_width" type="i" direction="in"/>
+      <arg name="target_height" type="i" direction="in"/>
+      <arg name="style" type="u" direction="in"/>
+      <arg name="points" type="(dddd)" direction="in"/>
+      <arg name="present" type="b" direction="out"/>
+      <arg name="region" type="a(iiii)" direction="out"/>
+    </method>
+    <method name="RenderSelection">
+      <annotation name="org.gtk.GDBus.C.UnixFD" value="true"/>
+      <arg name="page" type="i" direction="in"/>
+      <arg name="rotation" type="i" direction="in"/>
+      <arg name="scale" type="d" direction="in"/>
+      <arg name="target_width" type="i" direction="in"/>
+      <arg name="target_height" type="i" direction="in"/>
+      <arg name="annotations" type="u" direction="in"/>
+      <arg name="style" type="u" direction="in"/>
+      <arg name="points" type="(dddd)" direction="in"/>
+      <arg name="text_color" type="(dddd)" direction="in"/>
+      <arg name="base_color" type="(dddd)" direction="in"/>
+      <arg name="present" type="b" direction="out"/>
+      <arg name="buffer" type="(hiiiidddd)" direction="out"/>
+    </method>
     <method name="Render">
       <annotation name="org.gtk.GDBus.C.UnixFD" value="true"/>
       <arg name="page" type="i" direction="in"/>

@@ -78,6 +78,8 @@ mod imp {
                 .change_action_state("night-mode", &self.settings.boolean("night-mode").into());
         }
         fn dispose(&self) {
+            // Children may retain the action group after the window is gone.
+            self.obj().remove_action("vertical-tabs");
             self.default_settings.apply();
         }
     }

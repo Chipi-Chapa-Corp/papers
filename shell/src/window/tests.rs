@@ -150,6 +150,29 @@ fn vertical_tabs_share_selection_and_adapt_to_the_window_width() {
 }
 
 #[test]
+fn layout_changes_do_not_notify_closed_windows() {
+    crate::tests::run(|| {
+        let settings = gio::Settings::new("org.gnome.Papers");
+        for _ in 0..3 {
+            let window = PpsWindow::new();
+            window.new_tab();
+            window.present();
+            // A surviving child may still observe the window's action group.
+            let tab_bar = window.imp().tab_bar.get();
+            let weak = window.downgrade();
+            window.close();
+            drop(window);
+            wait_until("closed window release", || weak.upgrade().is_none());
+            settings
+                .set_boolean("vertical-tabs", !settings.boolean("vertical-tabs"))
+                .unwrap();
+            drop(tab_bar);
+        }
+        settings.set_boolean("vertical-tabs", false).unwrap();
+    });
+}
+
+#[test]
 fn tabs_reorder_transfer_and_close_through_their_current_window() {
     crate::tests::run(|| {
         let window = PpsWindow::new();

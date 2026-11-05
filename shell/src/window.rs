@@ -318,6 +318,13 @@ mod imp {
         }
 
         fn setup_tabs(&self) {
+            // These shortcuts already navigate within the document.
+            self.tabs.remove_shortcuts(
+                adw::TabViewShortcuts::CONTROL_HOME
+                    | adw::TabViewShortcuts::CONTROL_END
+                    | adw::TabViewShortcuts::CONTROL_PAGE_UP
+                    | adw::TabViewShortcuts::CONTROL_PAGE_DOWN,
+            );
             self.tabs.connect_close_page(|_, page| {
                 page.child()
                     .downcast::<PpsDocumentTab>()

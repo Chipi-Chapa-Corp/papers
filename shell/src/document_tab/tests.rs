@@ -58,3 +58,44 @@ fn document_loading_and_passwords_belong_to_each_tab() {
         invalid.delete(gio::Cancellable::NONE).unwrap();
     });
 }
+
+#[test]
+fn a_document_copy_keeps_its_temporary_file_alive() {
+    crate::tests::run(|| {
+        let downloaded = papers_document::mkstemp_file("document.XXXXXX.pdf").unwrap();
+        std::fs::copy(
+            fixture("utf16le-annot.pdf").path().unwrap(),
+            downloaded.path().unwrap(),
+        )
+        .unwrap();
+        let source = PpsDocumentTab::new();
+        let copy = PpsDocumentTab::new();
+        let contents = gtk::Box::new(gtk::Orientation::Horizontal, 0);
+        contents.append(&source);
+        contents.append(&copy);
+        let window = adw::Window::builder().content(&contents).build();
+        window.present();
+        source.open(&downloaded, None, None);
+        source
+            .imp()
+            .local_file
+            .replace(Some(Rc::new(TemporaryFile(downloaded.clone()))));
+        wait_until("temporary document", || source.document().is_some());
+        copy.open_copy_from(&source, None);
+
+        let source_ref = source.downgrade();
+        contents.remove(&source);
+        drop(source);
+        wait_until("source document disposal", || {
+            source_ref.upgrade().is_none()
+        });
+        assert!(downloaded.query_exists(gio::Cancellable::NONE));
+
+        let copy_ref = copy.downgrade();
+        contents.remove(&copy);
+        drop(copy);
+        wait_until("document copy disposal", || copy_ref.upgrade().is_none());
+        assert!(!downloaded.query_exists(gio::Cancellable::NONE));
+        window.destroy();
+    });
+}

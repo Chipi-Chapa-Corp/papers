@@ -1,7 +1,7 @@
 use crate::deps::*;
 
 use std::cell::Cell;
-use std::path::PathBuf;
+use std::rc::Rc;
 
 use glib::closure_local;
 use gtk::TextDirection;
@@ -14,6 +14,19 @@ use papers_view::SizingMode;
 
 #[cfg(test)]
 mod tests;
+
+#[derive(Debug)]
+struct TemporaryFile(gio::File);
+
+impl Drop for TemporaryFile {
+    fn drop(&mut self) {
+        if let Err(error) = self.0.delete(gio::Cancellable::NONE)
+            && !error.matches(gio::IOErrorEnum::NotFound)
+        {
+            warn!("Failed to remove temporary document: {error}");
+        }
+    }
+}
 
 mod imp {
     use super::*;
@@ -62,7 +75,7 @@ mod imp {
         pub(super) monitor: RefCell<Option<PpsFileMonitor>>,
 
         // Loaders
-        pub(super) local_path: RefCell<Option<PathBuf>>,
+        pub(super) local_file: RefCell<Option<Rc<TemporaryFile>>>,
         pub(super) file: RefCell<Option<gio::File>>,
 
         // Reload
@@ -160,9 +173,7 @@ mod imp {
         }
 
         fn clear_local_uri(&self) {
-            if let Some(path) = self.local_path.take() {
-                std::fs::remove_file(path).expect("failed to remove temp file");
-            }
+            self.local_file.take();
         }
 
         fn clear_load_job(&self) {
@@ -390,13 +401,7 @@ mod imp {
         fn load_remote_failed(&self, error: &glib::Error) {
             self.error_message(
                 Some(error),
-                &self
-                    .local_path
-                    .borrow()
-                    .as_ref()
-                    .unwrap()
-                    .display()
-                    .to_string(),
+                &self.local_file.borrow().as_ref().unwrap().0.uri(),
             );
 
             self.clear_local_uri();
@@ -456,22 +461,20 @@ mod imp {
 
         fn load_remote_file<'a>(&'a self, file: &'a gio::File) -> LocalBoxFuture<'a, ()> {
             async move {
-                if self.local_path.borrow().is_none() {
+                if self.local_file.borrow().is_none() {
                     // We'd like to keep extension of source uri since
                     // it helps to resolve some mime types, say cbz.
                     let base_name = self.edit_name.borrow().clone();
                     let template = format!("document.XXXXXX-{base_name}");
-                    match papers_document::mkstemp(&template) {
-                        Ok((_, temp_file)) => {
-                            let file = gio::File::for_path(&temp_file);
-
+                    match papers_document::mkstemp_file(&template) {
+                        Ok(file) => {
                             self.load_job
                                 .borrow()
                                 .as_ref()
                                 .unwrap()
                                 .set_uri(&file.uri());
 
-                            self.local_path.replace(Some(temp_file));
+                            self.local_file.replace(Some(Rc::new(TemporaryFile(file))));
                         }
                         Err(e) => {
                             self.error_message(Some(&e), &gettext("Failed to Load Remote File."));
@@ -480,7 +483,7 @@ mod imp {
                     }
                 }
 
-                let target_file = gio::File::for_path(self.local_path.borrow().as_ref().unwrap());
+                let target_file = self.local_file.borrow().as_ref().unwrap().0.clone();
 
                 self.loader_view.set_uri(file.uri());
                 self.set_mode(WindowRunMode::LoaderView);
@@ -597,10 +600,10 @@ mod imp {
 
         fn reload_local(&self) {
             let Some(file) = self
-                .local_path
+                .local_file
                 .borrow()
                 .as_ref()
-                .map(gio::File::for_path)
+                .map(|file| file.0.clone())
                 .or(self.file.borrow().clone())
             else {
                 return;
@@ -635,7 +638,7 @@ mod imp {
         }
 
         async fn copy_and_reload_local(&self, remote: &gio::File) {
-            let target = gio::File::for_path(self.local_path.borrow().as_ref().unwrap());
+            let target = self.local_file.borrow().as_ref().unwrap().0.clone();
 
             let (result, _) = remote.copy_future(
                 &target,
@@ -683,7 +686,7 @@ mod imp {
             self.clear_reload_job();
             self.dest.take();
 
-            if self.local_path.borrow().is_some() {
+            if self.local_file.borrow().is_some() {
                 self.reload_remote().await;
             } else {
                 self.reload_local();
@@ -1084,6 +1087,9 @@ impl PpsDocumentTab {
     }
     pub fn open_copy_from(&self, source: &Self, dest: Option<&LinkDest>) {
         self.imp().file.replace(source.imp().file.borrow().clone());
+        self.imp()
+            .local_file
+            .replace(source.imp().local_file.borrow().clone());
         self.imp().metadata.replace(source.metadata());
         self.imp().display_name.replace(source.display_name());
         self.imp()

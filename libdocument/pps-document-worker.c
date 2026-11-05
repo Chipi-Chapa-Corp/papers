@@ -398,6 +398,7 @@ main (int argc, char **argv)
 	pps_document_worker_bind_attachments (&worker, interface);
 	pps_document_worker_bind_annotations (&worker, interface);
 	pps_document_worker_bind_fonts (&worker, interface);
+	pps_document_worker_bind_images (&worker, interface);
 	if (!g_dbus_interface_skeleton_export (G_DBUS_INTERFACE_SKELETON (interface),
 	                                       connection, PPS_DOCUMENT_WORKER_PATH, &error)) {
 		pps_shutdown ();
@@ -411,6 +412,7 @@ main (int argc, char **argv)
 	g_clear_pointer (&worker.forms, g_hash_table_unref);
 	g_clear_pointer (&worker.attachments, g_ptr_array_unref);
 	g_clear_pointer (&worker.annotations, g_hash_table_unref);
+	g_clear_pointer (&worker.images, g_hash_table_unref);
 	g_clear_object (&worker.document);
 	pps_shutdown ();
 	return 0;

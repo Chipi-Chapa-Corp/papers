@@ -19,6 +19,7 @@ typedef struct {
 	GPtrArray *attachments;
 	GHashTable *annotations;
 	GHashTable *images;
+	GHashTable *media;
 	gboolean outlines_loaded;
 	gboolean layers_loaded;
 } Worker;
@@ -33,6 +34,7 @@ void pps_document_worker_bind_annotations (Worker *worker, PpsDBusDocument *inte
 void pps_document_worker_bind_fonts (Worker *worker, PpsDBusDocument *interface);
 void pps_document_worker_bind_images (Worker *worker, PpsDBusDocument *interface);
 void pps_document_worker_bind_transition (Worker *worker, PpsDBusDocument *interface);
+void pps_document_worker_bind_media (Worker *worker, PpsDBusDocument *interface);
 void pps_document_worker_clear_links (Worker *worker);
 gboolean pps_document_worker_check_document (Worker *worker, GType capability, GDBusMethodInvocation *invocation);
 guint pps_document_worker_get_state (Worker *worker);

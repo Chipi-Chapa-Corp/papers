@@ -68,6 +68,17 @@
       <arg name="page" type="i" direction="in"/>
       <arg name="effect" type="(iiiididb)" direction="out"/>
     </method>
+    <method name="GetMediaMapping">
+      <arg name="page" type="i" direction="in"/>
+      <arg name="present" type="b" direction="out"/>
+      <arg name="mappings" type="a((dddd)a{sv})" direction="out"/>
+    </method>
+    <method name="GetMediaData">
+      <annotation name="org.gtk.GDBus.C.UnixFD" value="true"/>
+      <arg name="media" type="t" direction="in"/>
+      <arg name="size" type="t" direction="out"/>
+      <arg name="buffer" type="h" direction="out"/>
+    </method>
     <method name="GetAttachments">
       <annotation name="org.gtk.GDBus.C.UnixFD" value="true"/>
       <arg name="start" type="u" direction="in"/>

@@ -183,6 +183,14 @@ reject_invalid_requests (void)
 	    session->proxy, 0, G_DBUS_CALL_FLAGS_NONE, 5000, NULL, NULL, &error));
 	g_assert_error (error, G_IO_ERROR, G_IO_ERROR_INVALID_ARGUMENT);
 	g_clear_error (&error);
+	g_assert_false (pps_dbus_document_call_get_media_mapping_sync (
+	    session->proxy, 0, G_DBUS_CALL_FLAGS_NONE, 5000, NULL, NULL, NULL, &error));
+	g_assert_error (error, G_IO_ERROR, G_IO_ERROR_INVALID_ARGUMENT);
+	g_clear_error (&error);
+	g_assert_false (pps_dbus_document_call_get_media_data_sync (
+	    session->proxy, 1, G_DBUS_CALL_FLAGS_NONE, 5000, NULL, NULL, NULL, NULL, NULL, &error));
+	g_assert_error (error, G_IO_ERROR, G_IO_ERROR_NOT_INITIALIZED);
+	g_clear_error (&error);
 	g_assert_cmpint (load (session, "missing.pdf", "", &error), ==, -1);
 	g_assert_nonnull (error);
 	g_clear_error (&error);

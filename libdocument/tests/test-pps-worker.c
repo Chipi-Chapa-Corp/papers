@@ -7,6 +7,7 @@
 #include <sys/wait.h>
 #include <unistd.h>
 
+#include "pps-document-info-private.h"
 #include "pps-document-session-private.h"
 #include "pps-document.h"
 
@@ -46,6 +47,8 @@ page_info (PpsDocumentSession *session)
 {
 	g_autoptr (GError) error = NULL;
 	g_autofree char *label = NULL;
+	g_autoptr (GVariant) metadata = NULL;
+	g_autoptr (PpsDocumentInfo) info = NULL;
 	double width, height;
 
 	g_assert_true (pps_dbus_document_call_get_page_info_sync (
@@ -55,6 +58,13 @@ page_info (PpsDocumentSession *session)
 	g_assert_cmpfloat (width, >, 0);
 	g_assert_cmpfloat (height, >, 0);
 	g_assert_nonnull (label);
+	g_assert_true (pps_dbus_document_call_get_info_sync (
+	    session->proxy, G_DBUS_CALL_FLAGS_NONE, 5000, &metadata, NULL, &error));
+	g_assert_no_error (error);
+	info = _pps_document_info_from_variant (metadata, &error);
+	g_assert_no_error (error);
+	g_assert_nonnull (info);
+	g_assert_cmpint (info->n_pages, ==, 1);
 }
 
 static void

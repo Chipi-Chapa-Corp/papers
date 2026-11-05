@@ -24,6 +24,9 @@
       <arg name="height" type="d" direction="out"/>
       <arg name="label" type="s" direction="out"/>
     </method>
+    <method name="GetInfo">
+      <arg name="info" type="a{sv}" direction="out"/>
+    </method>
     <method name="Render">
       <annotation name="org.gtk.GDBus.C.UnixFD" value="true"/>
       <arg name="page" type="i" direction="in"/>

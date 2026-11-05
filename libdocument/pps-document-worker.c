@@ -8,6 +8,7 @@
 
 #include "pps-document-buffer-private.h"
 #include "pps-document-factory-private.h"
+#include "pps-document-info-private.h"
 #include "pps-document-session-private.h"
 #include "pps-document-signatures.h"
 
@@ -168,6 +169,27 @@ get_page_info (PpsDBusDocument *interface,
 }
 
 static gboolean
+get_info (PpsDBusDocument *interface,
+          GDBusMethodInvocation *invocation,
+          Worker *worker)
+{
+	g_autoptr (PpsDocumentInfo) info = NULL;
+
+	if (!worker->loaded) {
+		g_dbus_method_invocation_return_error_literal (
+		    invocation, G_IO_ERROR, G_IO_ERROR_NOT_INITIALIZED,
+		    "The document is not loaded");
+		return TRUE;
+	}
+	info = pps_document_get_info (worker->document);
+	if (!info)
+		info = pps_document_info_new ();
+	pps_dbus_document_complete_get_info (interface, invocation,
+	                                     _pps_document_info_to_variant (info));
+	return TRUE;
+}
+
+static gboolean
 render (PpsDBusDocument *interface,
         GDBusMethodInvocation *invocation,
         GUnixFDList *input_fds,
@@ -273,6 +295,7 @@ main (int argc, char **argv)
 	g_signal_connect (interface, "handle-load", G_CALLBACK (load_document), &worker);
 	g_signal_connect (interface, "handle-load-fd", G_CALLBACK (load_document_fd), &worker);
 	g_signal_connect (interface, "handle-get-page-info", G_CALLBACK (get_page_info), &worker);
+	g_signal_connect (interface, "handle-get-info", G_CALLBACK (get_info), &worker);
 	g_signal_connect (interface, "handle-render", G_CALLBACK (render), &worker);
 	if (!g_dbus_interface_skeleton_export (G_DBUS_INTERFACE_SKELETON (interface),
 	                                       connection, PPS_DOCUMENT_WORKER_PATH, &error)) {

@@ -12,12 +12,13 @@ test_worker = executable(
 
 test('pps-worker-test', test_worker, env: backend_env, depends: document_worker)
 
-test_buffer = executable(
-  'test-pps-buffer',
-  'test-pps-buffer.c',
-  include_directories: top_inc,
-  dependencies: libppsdocument_dep,
-  c_args: '-DPAPERS_COMPILATION',
-)
-
-test('pps-buffer-test', test_buffer)
+foreach name: ['buffer', 'info']
+  test_executable = executable(
+    'test-pps-' + name,
+    'test-pps-@0@.c'.format(name),
+    include_directories: top_inc,
+    dependencies: libppsdocument_dep,
+    c_args: '-DPAPERS_COMPILATION',
+  )
+  test('pps-@0@-test'.format(name), test_executable)
+endforeach

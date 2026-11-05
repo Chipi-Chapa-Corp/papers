@@ -29,6 +29,12 @@ free_handle (gpointer data)
 	g_free (handle);
 }
 
+gboolean
+_pps_document_objects_has_binding (GObject *object)
+{
+	return g_object_get_qdata (object, handle_quark ()) != NULL;
+}
+
 PpsDocumentObjects *
 _pps_document_objects_new (void)
 {

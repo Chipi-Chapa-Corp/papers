@@ -79,8 +79,10 @@ bound_wrapper_lifetime (void)
 	g_autoptr (PpsDocumentObjects) second = _pps_document_objects_new ();
 	g_autoptr (GObject) wrapper = g_object_new (G_TYPE_OBJECT, NULL);
 	g_autoptr (GObject) alias = g_object_new (G_TYPE_OBJECT, NULL);
+	g_assert_false (_pps_document_objects_has_binding (wrapper));
 	g_assert_false (_pps_document_objects_bind (first, 0, wrapper));
 	g_assert_true (_pps_document_objects_bind (first, 7, wrapper));
+	g_assert_true (_pps_document_objects_has_binding (wrapper));
 	g_assert_true (_pps_document_objects_bind (first, 7, alias));
 	g_assert_true (_pps_document_objects_bind (first, 7, wrapper));
 	g_assert_false (_pps_document_objects_bind (first, 8, wrapper));

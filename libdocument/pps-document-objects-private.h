@@ -24,3 +24,5 @@ gboolean _pps_document_objects_import (PpsDocumentObjects *objects, guint64 id, 
 /* Bind an independent local wrapper without retaining it. */
 PPS_PRIVATE
 gboolean _pps_document_objects_bind (PpsDocumentObjects *objects, guint64 id, GObject *object);
+PPS_PRIVATE
+gboolean _pps_document_objects_has_binding (GObject *object);

@@ -1353,6 +1353,71 @@ no_images (void)
 	pps_mapping_list_unref (mappings);
 }
 
+static void
+presentation_transitions (void)
+{
+	const char *names[] = { "R", "Split", "Blinds", "Box", "Wipe", "Dissolve", "Glitter", "Fly", "Push", "Cover", "Uncover", "Fade" };
+	guint count = G_N_ELEMENTS (names) + 1;
+	g_autoptr (GString) references = g_string_new (NULL);
+	for (guint i = 0; i < count; i++)
+		g_string_append_printf (references, "%u 0 R ", i + 3);
+	g_autoptr (GPtrArray) objects = g_ptr_array_new_with_free_func (g_free);
+	g_ptr_array_add (objects, g_strdup ("<< /Type /Catalog /Pages 2 0 R >>"));
+	g_ptr_array_add (objects, g_strdup_printf ("<< /Type /Pages /Count %u /Kids [%s] >>", count, references->str));
+	for (guint i = 0; i < count; i++) {
+		g_autofree char *transition = i < G_N_ELEMENTS (names) ? g_strdup_printf ("/Dur 4.25 /Trans << /S /%s /D 2.75 /Dm /V /M /O /Di 270 /SS 0.625 /B true >>", names[i]) : g_strdup ("");
+		g_ptr_array_add (objects, g_strdup_printf ("<< /Type /Page /Parent 2 0 R /MediaBox [0 0 100 100] /Resources << >> /Contents %u 0 R %s >>", count + 3, transition));
+	}
+	g_ptr_array_add (objects, g_strdup ("<< /Length 0 >>\nstream\nendstream"));
+	g_autofree char *path = write_pdf_fixture ("transitions.pdf", (const char *const *) objects->pdata, objects->len);
+	g_autofree char *uri = g_filename_to_uri (path, NULL, NULL);
+	g_autoptr (PpsDocument) document = new_document ();
+	load_document (document, uri);
+	g_assert_true (PPS_IS_DOCUMENT_TRANSITION (document));
+	PpsDocumentTransition *transitions = PPS_DOCUMENT_TRANSITION (document);
+	for (guint i = 0; i < G_N_ELEMENTS (names); i++) {
+		g_assert_cmpfloat (pps_document_transition_get_page_duration (transitions, i), ==, 4.25);
+		g_autoptr (PpsTransitionEffect) effect = pps_document_transition_get_effect (transitions, i);
+		int type;
+		double duration;
+		g_object_get (effect, "type", &type, "duration-real", &duration, NULL);
+		g_assert_cmpint (type, ==, i);
+		g_assert_cmpfloat (duration, ==, 2.75);
+	}
+	g_autoptr (PpsTransitionEffect) fly = pps_document_transition_get_effect (transitions, PPS_TRANSITION_EFFECT_FLY);
+	int alignment, direction, angle;
+	double scale;
+	gboolean rectangular;
+	g_object_get (fly, "alignment", &alignment, "direction", &direction, "angle", &angle,
+	              "scale", &scale, "rectangular", &rectangular, NULL);
+	g_assert_cmpint (alignment, ==, PPS_TRANSITION_ALIGNMENT_VERTICAL);
+	g_assert_cmpint (direction, ==, PPS_TRANSITION_DIRECTION_OUTWARD);
+	g_assert_cmpint (angle, ==, 270);
+	g_assert_cmpfloat_with_epsilon (scale, .625, 1e-12);
+	g_assert_true (rectangular);
+	g_assert_cmpfloat (pps_document_transition_get_page_duration (transitions, count - 1), ==, -1);
+	g_autoptr (PpsTransitionEffect) none = pps_document_transition_get_effect (transitions, count - 1);
+	int type;
+	g_object_get (none, "type", &type, NULL);
+	g_assert_cmpint (type, ==, PPS_TRANSITION_EFFECT_REPLACE);
+	PpsDocumentSession *session = _pps_document_proxy_get_session (document);
+	g_autoptr (GError) error = NULL;
+	g_assert_false (pps_dbus_document_call_get_page_duration_sync (session->proxy, -1,
+	                                                               G_DBUS_CALL_FLAGS_NONE, 5000, NULL, NULL, &error));
+	g_assert_error (error, G_IO_ERROR, G_IO_ERROR_INVALID_ARGUMENT);
+	g_clear_error (&error);
+	g_assert_false (pps_dbus_document_call_get_transition_effect_sync (session->proxy, count,
+	                                                                   G_DBUS_CALL_FLAGS_NONE, 5000, NULL, NULL, &error));
+	g_assert_error (error, G_IO_ERROR, G_IO_ERROR_INVALID_ARGUMENT);
+	g_assert_cmpfloat (pps_document_transition_get_page_duration (transitions, count), ==, -1);
+	render_page (document, count - 1);
+	g_clear_object (&document);
+	g_object_get (fly, "scale", &scale, "rectangular", &rectangular, NULL);
+	g_assert_cmpfloat_with_epsilon (scale, .625, 1e-12);
+	g_assert_true (rectangular);
+	g_assert_cmpint (g_unlink (path), ==, 0);
+}
+
 int
 main (int argc, char **argv)
 {
@@ -1379,6 +1444,7 @@ main (int argc, char **argv)
 	g_test_add_func ("/document-proxy/no-fonts", no_fonts);
 	g_test_add_func ("/document-proxy/embedded-images", embedded_images);
 	g_test_add_func ("/document-proxy/no-images", no_images);
+	g_test_add_func ("/document-proxy/presentation-transitions", presentation_transitions);
 	int result = g_test_run ();
 	g_unlink (fixture_path);
 	g_rmdir (fixture_dir);

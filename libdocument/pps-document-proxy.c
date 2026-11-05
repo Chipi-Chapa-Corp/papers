@@ -347,6 +347,7 @@ _pps_document_proxy_type_for_interfaces (const char *const *interfaces, guint an
 		{ PPS_TYPE_DOCUMENT_ANNOTATIONS, (GInterfaceInitFunc) _pps_document_proxy_annotations_iface_init },
 		{ PPS_TYPE_DOCUMENT_FONTS, (GInterfaceInitFunc) _pps_document_proxy_fonts_iface_init },
 		{ PPS_TYPE_DOCUMENT_IMAGES, (GInterfaceInitFunc) _pps_document_proxy_images_iface_init },
+		{ PPS_TYPE_DOCUMENT_TRANSITION, (GInterfaceInitFunc) _pps_document_proxy_transition_iface_init },
 	};
 	for (guint i = 0; i < G_N_ELEMENTS (capabilities); i++) {
 		if (g_strv_contains (interfaces, g_type_name (capabilities[i].type)))

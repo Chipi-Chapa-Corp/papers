@@ -14,6 +14,7 @@
 #include "pps-document-session-private.h"
 #include "pps-document-state-private.h"
 #include "pps-document-text.h"
+#include "pps-document-transition.h"
 #include "pps-document.h"
 #include "pps-selection.h"
 
@@ -53,3 +54,4 @@ void _pps_document_proxy_attachments_iface_init (PpsDocumentAttachmentsInterface
 void _pps_document_proxy_annotations_iface_init (PpsDocumentAnnotationsInterface *iface, gpointer data);
 void _pps_document_proxy_fonts_iface_init (PpsDocumentFontsInterface *iface);
 void _pps_document_proxy_images_iface_init (PpsDocumentImagesInterface *iface);
+void _pps_document_proxy_transition_iface_init (PpsDocumentTransitionInterface *iface);

@@ -173,6 +173,7 @@ libppsdocument = shared_library(
     'pps-document-proxy-text.c',
     'pps-document-proxy-selection.c',
     'pps-document-geometry.c',
+    'pps-document-objects.c',
   ],
   include_directories: top_inc,
   dependencies: libdocument_deps,

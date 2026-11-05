@@ -13,7 +13,7 @@ foreach name: ['worker', 'proxy']
   test('pps-@0@-test'.format(name), test_executable, env: backend_env, depends: document_worker)
 endforeach
 
-foreach name: ['buffer', 'info', 'geometry']
+foreach name: ['buffer', 'info', 'geometry', 'objects']
   test_executable = executable(
     'test-pps-' + name,
     'test-pps-@0@.c'.format(name),

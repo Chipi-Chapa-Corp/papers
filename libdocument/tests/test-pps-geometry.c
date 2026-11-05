@@ -3,6 +3,17 @@
 #include <math.h>
 
 #include "pps-document-geometry-private.h"
+#include "pps-link-dest.h"
+
+static void
+destination_right_property (void)
+{
+	g_autoptr (PpsLinkDest) dest = pps_link_dest_new_fitr (0, 1, 2, 30, 40);
+	double right;
+	g_object_get (dest, "right", &right, NULL);
+	g_assert_cmpfloat (right, ==, 30);
+	g_assert_cmpfloat (right, ==, pps_link_dest_get_right (dest));
+}
 
 static void
 rectangles (void)
@@ -65,5 +76,6 @@ main (int argc, char **argv)
 	g_test_add_func ("/document-geometry/rectangles", rectangles);
 	g_test_add_func ("/document-geometry/regions", regions);
 	g_test_add_func ("/document-geometry/invalid", invalid_geometry);
+	g_test_add_func ("/document-geometry/destination-right", destination_right_property);
 	return g_test_run ();
 }

@@ -187,7 +187,7 @@ pps_link_dest_get_property (GObject *object,
 		g_value_set_double (value, priv->bottom);
 		break;
 	case PROP_RIGHT:
-		g_value_set_double (value, priv->left);
+		g_value_set_double (value, priv->right);
 		break;
 	case PROP_ZOOM:
 		g_value_set_double (value, priv->zoom);

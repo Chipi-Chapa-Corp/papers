@@ -36,3 +36,18 @@ pub fn fixture(name: &str) -> gio::File {
             .join(name),
     )
 }
+
+pub fn find_widget<T: IsA<gtk::Widget>>(widget: &impl IsA<gtk::Widget>) -> Option<T> {
+    let widget = widget.as_ref();
+    if let Ok(found) = widget.clone().downcast::<T>() {
+        return Some(found);
+    }
+    let mut child = widget.first_child();
+    while let Some(widget) = child {
+        if let Some(found) = find_widget::<T>(&widget) {
+            return Some(found);
+        }
+        child = widget.next_sibling();
+    }
+    None
+}

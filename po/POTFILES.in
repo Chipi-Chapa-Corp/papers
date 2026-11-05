@@ -78,5 +78,6 @@ shell/src/sidebar_attachments.rs
 shell/src/sidebar_layers.rs
 shell/src/sidebar_thumbnails.rs
 shell/src/sidebar_links.rs
+shell/src/tab_list.rs
 shell/src/thumbnail_item.rs
 

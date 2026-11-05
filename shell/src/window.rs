@@ -34,6 +34,11 @@ mod imp {
         pub(super) tabs: TemplateChild<adw::TabView>,
         #[template_child]
         pub(super) tab_bar: TemplateChild<adw::TabBar>,
+        #[template_child]
+        pub(super) tab_sidebar: TemplateChild<gtk::Box>,
+        #[template_child]
+        pub(super) tab_list: TemplateChild<gtk::ListView>,
+        pub(super) narrow: Cell<bool>,
         pub(super) selected_tab: RefCell<Option<PpsDocumentTab>>,
         pub(super) selected_bindings: RefCell<Vec<glib::Binding>>,
         pub(super) closing: Cell<bool>,
@@ -191,6 +196,8 @@ mod imp {
             ];
 
             self.obj().add_action_entries(actions);
+            self.obj()
+                .add_action(&self.settings.create_action("vertical-tabs"));
         }
 
         fn setup_window_size(&self) {
@@ -329,6 +336,10 @@ mod imp {
         }
 
         fn setup_tabs(&self) {
+            self.tab_list.set_model(Some(&self.tabs.pages()));
+            self.tab_list
+                .set_factory(Some(&crate::tab_list::factory(&self.tabs)));
+            self.update_tab_layout();
             // These shortcuts already navigate within the document.
             self.tabs.remove_shortcuts(
                 adw::TabViewShortcuts::CONTROL_HOME
@@ -381,20 +392,24 @@ mod imp {
                 binding.unbind();
             }
             if let Some(tab) = tab {
-                self.selected_bindings.borrow_mut().extend([
+                self.selected_bindings.borrow_mut().push(
                     tab.bind_property("title", self.obj().as_ref(), "title")
                         .sync_create()
                         .build(),
-                    tab.bind_property("presenting", &self.tab_bar.get(), "visible")
-                        .invert_boolean()
-                        .sync_create()
-                        .build(),
-                ]);
+                );
                 tab.set_fullscreen_mode(self.obj().is_fullscreen());
                 tab.focus_view();
             } else {
                 self.obj().set_title(Some(&gettext("Document Viewer")));
             }
+            self.update_tab_layout();
+        }
+
+        fn update_tab_layout(&self) {
+            let presenting = self.current_tab().is_some_and(|tab| tab.presenting());
+            let vertical = self.settings.boolean("vertical-tabs") && !self.narrow.get();
+            self.tab_sidebar.set_visible(vertical && !presenting);
+            self.tab_bar.set_visible(!vertical && !presenting);
         }
 
         fn append_tab(&self, tab: &PpsDocumentTab) -> adw::TabPage {
@@ -416,8 +431,20 @@ mod imp {
                     }
                 }),
             );
+            tab.connect_presenting_notify(|tab| {
+                if let Some(window) = tab.root().and_downcast::<super::PpsWindow>() {
+                    window.imp().update_tab_layout();
+                }
+            });
             let page = self.tabs.append(tab);
-            tab.bind_property("title", &page, "title")
+            tab.bind_property("display-name", &page, "title")
+                .transform_to(|_, name: String| {
+                    Some(if name.is_empty() {
+                        gettext("New Tab")
+                    } else {
+                        name
+                    })
+                })
                 .sync_create()
                 .build();
             tab.bind_property("loading", &page, "loading")
@@ -501,6 +528,23 @@ mod imp {
 
     #[gtk::template_callbacks]
     impl PpsWindow {
+        #[template_callback]
+        fn vertical_tabs_changed(&self) {
+            self.update_tab_layout();
+        }
+
+        #[template_callback]
+        fn narrow_layout(&self) {
+            self.narrow.set(true);
+            self.update_tab_layout();
+        }
+
+        #[template_callback]
+        fn wide_layout(&self) {
+            self.narrow.set(false);
+            self.update_tab_layout();
+        }
+
         #[template_callback]
         fn window_fullscreened(&self) {
             let obj = self.obj();

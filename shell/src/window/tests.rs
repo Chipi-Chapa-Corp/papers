@@ -103,6 +103,53 @@ fn file_drops_and_tab_actions_use_the_same_document_pages() {
 }
 
 #[test]
+fn vertical_tabs_share_selection_and_adapt_to_the_window_width() {
+    crate::tests::run(|| {
+        let window = PpsWindow::new();
+        window
+            .imp()
+            .default_settings
+            .set_int("window-width", 1100)
+            .unwrap();
+        window.set_default_size(1100, 700);
+        window.open(&fixture("utf16le-annot.pdf"), None, None);
+        window.open(&fixture("ink_annotations.pdf"), None, None);
+        window.present();
+        WidgetExt::activate_action(&window, "win.vertical-tabs", None).unwrap();
+        wait_until("vertical tabs", || window.imp().tab_sidebar.is_visible());
+        assert!(!window.imp().tab_bar.is_visible());
+        let pages = window.imp().tab_list.model().unwrap();
+        assert_eq!(pages, window.imp().tabs.pages());
+        pages.select_item(0, true);
+        let first = window.imp().current_tab().unwrap();
+        wait_until("selected vertical document", || first.document().is_some());
+        assert_eq!(window.title().as_deref(), Some("utf16le-annot.pdf"));
+
+        window.set_default_size(600, 700);
+        wait_until("narrow tab layout", || {
+            !window.imp().tab_sidebar.is_visible() && window.imp().tab_bar.is_visible()
+        });
+        assert!(window.imp().settings.boolean("vertical-tabs"));
+        assert_eq!(window.imp().current_tab(), Some(first));
+        window.set_default_size(1100, 700);
+        wait_until("restored vertical tabs", || {
+            window.imp().tab_sidebar.is_visible()
+        });
+
+        let close = crate::tests::find_widget::<gtk::Button>(&window.imp().tab_list.get()).unwrap();
+        close.emit_clicked();
+        assert_eq!(window.imp().tabs.n_pages(), 1);
+        window
+            .imp()
+            .settings
+            .set_boolean("vertical-tabs", false)
+            .unwrap();
+        window.close();
+        wait_until("window close", || !window.is_visible());
+    });
+}
+
+#[test]
 fn tabs_reorder_transfer_and_close_through_their_current_window() {
     crate::tests::run(|| {
         let window = PpsWindow::new();

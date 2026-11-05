@@ -3,6 +3,9 @@
 <node>
   <!-- Private peer interface, shared by one document and its worker. -->
   <interface name="org.gnome.Papers.Document">
+    <method name="GetSignatures">
+      <arg name="signatures" type="aa{sv}" direction="out"/>
+    </method>
     <method name="Create">
       <arg name="mime_type" type="s" direction="in"/>
       <arg name="interfaces" type="as" direction="out"/>

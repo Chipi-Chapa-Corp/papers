@@ -250,6 +250,10 @@ get_info (PpsDBusDocument *interface,
 	if (PPS_IS_FILE_EXPORTER (worker->document))
 		g_variant_dict_insert (&properties, "export-capabilities", "u",
 		                       pps_file_exporter_get_capabilities (PPS_FILE_EXPORTER (worker->document)));
+	if (PPS_IS_DOCUMENT_SIGNATURES (worker->document)) {
+		g_variant_dict_insert (&properties, "can-sign", "b", pps_document_signatures_can_sign (PPS_DOCUMENT_SIGNATURES (worker->document)));
+		g_variant_dict_insert (&properties, "has-signatures", "b", pps_document_signatures_has_signatures (PPS_DOCUMENT_SIGNATURES (worker->document)));
+	}
 	pps_dbus_document_complete_get_info (interface, invocation,
 	                                     g_variant_dict_end (&properties),
 	                                     g_variant_builder_end (&pages),
@@ -405,6 +409,7 @@ main (int argc, char **argv)
 	pps_document_worker_bind_transition (&worker, interface);
 	pps_document_worker_bind_media (&worker, interface);
 	pps_document_worker_bind_exporter (&worker, interface);
+	pps_document_worker_bind_signatures (&worker, interface);
 	if (!g_dbus_interface_skeleton_export (G_DBUS_INTERFACE_SKELETON (interface),
 	                                       connection, PPS_DOCUMENT_WORKER_PATH, &error)) {
 		pps_shutdown ();

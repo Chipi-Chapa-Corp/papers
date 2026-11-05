@@ -4,6 +4,7 @@
 #include <glib/gstdio.h>
 
 #include "pps-document-factory-private.h"
+#include "pps-document-session-private.h"
 #include "pps-document-signature-private.h"
 #include "pps-document-signatures.h"
 #include "pps-init.h"
@@ -98,6 +99,21 @@ get_certificate (PpsDocument *document, guint *requests)
 	return certificate;
 }
 
+static char *
+create_signed_pdf (const char *name)
+{
+	g_autoptr (PpsDocument) document = open_document (source_path);
+	guint requests = 0;
+	g_autoptr (PpsCertificateInfo) certificate = get_certificate (document, &requests);
+	char *path = g_build_filename (fixture_dir, name, NULL);
+	g_autoptr (PpsSignature) signature = new_signature (certificate, path);
+	g_autoptr (GError) error = NULL;
+	g_assert_true (sign_document (document, signature, NULL, &error));
+	g_assert_no_error (error);
+	pps_document_signatures_set_password_callback (PPS_DOCUMENT_SIGNATURES (document), NULL, NULL);
+	return path;
+}
+
 static void
 sign_and_verify (void)
 {
@@ -106,16 +122,10 @@ sign_and_verify (void)
 		return;
 	}
 	g_autoptr (PpsDocument) document = open_document (source_path);
-	guint requests = 0;
-	g_autoptr (PpsCertificateInfo) certificate = get_certificate (document, &requests);
 	g_assert_true (pps_document_signatures_can_sign (PPS_DOCUMENT_SIGNATURES (document)));
 	g_assert_false (pps_document_signatures_has_signatures (PPS_DOCUMENT_SIGNATURES (document)));
 	g_assert_null (pps_document_signatures_get_signatures (PPS_DOCUMENT_SIGNATURES (document)));
-	g_autofree char *path = g_build_filename (fixture_dir, "signed.pdf", NULL);
-	g_autoptr (PpsSignature) signature = new_signature (certificate, path);
-	g_autoptr (GError) error = NULL;
-	g_assert_true (sign_document (document, signature, NULL, &error));
-	g_assert_no_error (error);
+	g_autofree char *path = create_signed_pdf ("signed.pdf");
 	g_autoptr (PpsDocument) signed_document = open_document (path);
 	g_assert_true (pps_document_signatures_has_signatures (PPS_DOCUMENT_SIGNATURES (signed_document)));
 	g_autolist (PpsSignature) signatures = pps_document_signatures_get_signatures (PPS_DOCUMENT_SIGNATURES (signed_document));
@@ -133,6 +143,80 @@ sign_and_verify (void)
 	g_object_get (signer, "subject-common-name", &name, NULL);
 	g_assert_cmpstr (name, ==, "Papers Test Signer");
 	pps_document_signatures_set_password_callback (PPS_DOCUMENT_SIGNATURES (document), NULL, NULL);
+}
+
+static void
+check_worker_signatures (const char *path, int expected_status)
+{
+	g_autoptr (PpsDocument) document = open_document (path);
+	g_autolist (PpsSignature) native = pps_document_signatures_get_signatures (PPS_DOCUMENT_SIGNATURES (document));
+	g_autoptr (PpsDocumentSession) session = _pps_document_session_new (NULL, NULL);
+	g_assert_nonnull (session);
+	g_autoptr (GError) error = NULL;
+	g_assert_true (pps_dbus_document_call_create_sync (session->proxy, "application/pdf", G_DBUS_CALL_FLAGS_NONE, 5000, NULL, NULL, NULL, &error));
+	g_assert_no_error (error);
+	g_autofree char *uri = g_filename_to_uri (path, NULL, NULL);
+	g_assert_true (pps_dbus_document_call_load_sync (session->proxy, uri, "", G_DBUS_CALL_FLAGS_NONE, 5000, NULL, NULL, &error));
+	g_assert_no_error (error);
+	g_autoptr (GVariant) metadata = NULL, signatures = NULL;
+	g_assert_true (pps_dbus_document_call_get_info_sync (session->proxy, G_DBUS_CALL_FLAGS_NONE, 5000, &metadata, NULL, NULL, NULL, NULL, NULL, &error));
+	g_assert_no_error (error);
+	gboolean has_signatures, can_sign;
+	g_assert_true (g_variant_lookup (metadata, "has-signatures", "b", &has_signatures));
+	g_assert_true (g_variant_lookup (metadata, "can-sign", "b", &can_sign));
+	g_assert_true (can_sign);
+	g_assert_cmpint (has_signatures, ==, expected_status >= 0);
+	g_assert_true (pps_dbus_document_call_get_signatures_sync (session->proxy, G_DBUS_CALL_FLAGS_NONE, 10000, &signatures, NULL, &error));
+	g_assert_no_error (error);
+	g_assert_cmpuint (g_variant_n_children (signatures), ==, g_list_length (native));
+	g_assert_cmpuint (g_variant_n_children (signatures), ==, expected_status >= 0 ? 1 : 0);
+	if (native) {
+		g_autoptr (GVariant) expected = g_variant_ref_sink (_pps_signature_info_to_variant (native->data));
+		g_autoptr (GVariant) value = g_variant_get_child_value (signatures, 0);
+		g_assert_true (g_variant_equal (value, expected));
+		g_autoptr (PpsSignature) copy = _pps_signature_info_from_variant (value, &error);
+		g_assert_no_error (error);
+		g_assert_nonnull (copy);
+		int status;
+		g_object_get (copy, "status", &status, NULL);
+		g_assert_cmpint (status, ==, expected_status);
+		g_assert_cmpint (pps_signature_is_valid (copy), ==, expected_status == PPS_SIGNATURE_STATUS_VALID);
+		g_clear_object (&document);
+		g_clear_pointer (&session, _pps_document_session_free);
+		g_autoptr (GVariant) again = g_variant_ref_sink (_pps_signature_info_to_variant (copy));
+		g_assert_true (g_variant_equal (again, expected));
+	}
+}
+
+static void
+worker_signatures (void)
+{
+	if (!certutil) {
+		g_test_skip ("certutil is needed to create a temporary signing certificate");
+		return;
+	}
+	g_autofree char *path = create_signed_pdf ("worker-signed.pdf");
+	check_worker_signatures (path, PPS_SIGNATURE_STATUS_VALID);
+	g_autofree char *contents = NULL;
+	gsize length;
+	g_autoptr (GError) error = NULL;
+	g_assert_true (g_file_get_contents (path, &contents, &length, &error));
+	g_assert_no_error (error);
+	/* Both line endings are valid PDF syntax, but the signed bytes differ. */
+	g_assert_cmpuint (length, >, 8);
+	g_assert_true (g_str_has_prefix (contents, "%PDF-"));
+	g_assert_cmpint (contents[8], ==, '\n');
+	contents[8] = '\r';
+	g_autofree char *tampered = g_build_filename (fixture_dir, "tampered.pdf", NULL);
+	g_assert_true (g_file_set_contents (tampered, contents, length, &error));
+	g_assert_no_error (error);
+	check_worker_signatures (tampered, PPS_SIGNATURE_STATUS_DIGEST_MISMATCH);
+}
+
+static void
+worker_unsigned (void)
+{
+	check_worker_signatures (source_path, -1);
 }
 
 static void
@@ -235,6 +319,8 @@ main (int argc, char **argv)
 	pps_init ();
 	g_test_add_func ("/document-signatures/sign-and-verify", sign_and_verify);
 	g_test_add_func ("/document-signatures/errors", signing_errors);
+	g_test_add_func ("/document-signatures/worker-signed-and-tampered", worker_signatures);
+	g_test_add_func ("/document-signatures/worker-unsigned", worker_unsigned);
 	int result = g_test_run ();
 	pps_shutdown ();
 	remove_fixture (fixture_dir);

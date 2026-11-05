@@ -2,10 +2,7 @@ use super::*;
 
 #[test]
 fn closing_reports_the_result_without_destroying_the_container() {
-    gtk::test_synced(|| {
-        let app = PpsApplication::new();
-        app.register(gio::Cancellable::NONE).unwrap();
-
+    crate::tests::run(|| {
         let view = PpsDocumentView::new();
         let window = adw::Window::builder()
             .title("Container")
@@ -31,10 +28,7 @@ fn closing_reports_the_result_without_destroying_the_container() {
         assert_eq!(*results.borrow(), [true]);
         assert!(window.is_visible());
 
-        let file = gio::File::for_path(concat!(
-            env!("CARGO_MANIFEST_DIR"),
-            "/../test-data/utf16le-annot.pdf"
-        ));
+        let file = crate::tests::fixture("utf16le-annot.pdf");
         let job = papers_view::JobLoad::new();
         job.set_uri(&file.uri());
         job.run();

@@ -38,6 +38,7 @@ previewer/pps-previewer-window.blp
 nautilus/pps-nautilus-extension.c
 nautilus/pps-nautilus-extension.h
 shell/resources/pps-annotation-properties-dialog.blp
+shell/resources/pps-document-tab.blp
 shell/resources/pps-document-view.blp
 shell/resources/pps-find-sidebar.blp
 shell/resources/pps-loader-view.blp
@@ -56,6 +57,7 @@ shell/resources/pps-sidebar-thumbnails.blp
 shell/resources/pps-window.blp
 shell/src/annotation_properties_dialog.rs
 shell/src/application.rs
+shell/src/document_tab.rs
 shell/src/document_view.rs
 shell/src/document_view/actions.rs
 shell/src/document_view/io.rs

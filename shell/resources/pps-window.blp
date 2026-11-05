@@ -18,145 +18,14 @@ template $PpsWindow: Adw.ApplicationWindow {
   height-request: 360;
   notify::fullscreened => $window_fullscreened() swapped;
 
-  content: Adw.ToastOverlay toast_overlay {
-    child: Adw.ViewStack stack {
-      hhomogeneous: false;
-      vhomogeneous: false;
-
-      Adw.ViewStackPage {
-        name: "start";
-
-        child: Adw.ToolbarView {
-          [top]
-          Adw.HeaderBar {
-            [end]
-            MenuButton {
-              icon-name: "open-menu-symbolic";
-              tooltip-text: _("Main Menu");
-              menu-model: app_menu;
-              primary: true;
-            }
-          }
-
-          content: Adw.StatusPage {
-            icon-name: "papers-rich-text";
-            title: _("Open a Document");
-            description: _("Drag and drop documents here");
-
-            child: Button open_button {
-              halign: center;
-              action-name: "win.open";
-              label: _("_Open…");
-              use-underline: true;
-              tooltip-text: C_("tooltip", "Open a Document");
-
-              styles [
-                "suggested-action",
-                "pill",
-              ]
-            };
-          };
-        };
-      }
-
-      Adw.ViewStackPage {
-        name: "error";
-
-        child: Adw.ToolbarView {
-          [top]
-          Adw.HeaderBar {}
-
-          content: Adw.StatusPage error_page {
-            icon-name: "dialog-error-symbolic";
-            title: _("Unable to Open Document");
-
-            child: Button {
-              halign: center;
-              action-name: "win.open";
-              label: _("_Open Other File…");
-              use-underline: true;
-
-              styles [
-                "suggested-action",
-                "pill",
-              ]
-            };
-          };
-        };
-      }
-
-      Adw.ViewStackPage {
-        name: "password";
-
-        child: $PpsPasswordView password_view {
-          unlock => $password_view_unlock() swapped;
-          cancelled => $password_view_cancelled() swapped;
-        };
-      }
-
-      Adw.ViewStackPage {
-        name: "loader";
-
-        child: $PpsLoaderView loader_view {
-          cancel => $loader_view_cancelled() swapped;
-        };
-      }
-
-      Adw.ViewStackPage {
-        name: "document";
-
-        child: $PpsDocumentView document_view {
-          close-finished => $document_view_close_finished() swapped;
-          open-copy => $document_view_open_copy() swapped;
-        };
-      }
-
-      Adw.ViewStackPage {
-        name: "presentation";
-
-        child: $PpsViewPresentation presentation {
-          finished => $presentation_finished() swapped;
-          external-link => $external_link_clicked() swapped;
-
-          ShortcutController {
-            Shortcut {
-              trigger: "Escape";
-              action: "action(win.escape)";
-            }
-          }
-        };
-      }
-    };
+  content: $PpsDocumentTab document_tab {
+    close-finished => $document_tab_close_finished() swapped;
+    open-copy => $document_tab_open_copy() swapped;
   };
 
   DropTarget {
     formats: "GdkFileList";
     actions: copy;
     drop => $drag_data_received() swapped;
-  }
-}
-
-Adw.AlertDialog error_alert {
-  responses [
-    close: _("_Close"),
-  ]
-}
-
-menu app_menu {
-  section {
-    item {
-      label: _("_Keyboard Shortcuts");
-      action: "app.shortcuts";
-    }
-
-    item {
-      label: _("_Help");
-      action: "app.help";
-    }
-
-    item {
-      label: _("_About Document Viewer");
-      action: "app.about";
-    }
   }
 }

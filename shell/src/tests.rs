@@ -1,0 +1,37 @@
+use crate::deps::*;
+use std::path::PathBuf;
+use std::time::{Duration, Instant};
+
+pub fn run(test: impl FnOnce() + Send + std::panic::UnwindSafe + 'static) {
+    gtk::test_synced(move || {
+        thread_local! {
+            static APPLICATION: PpsApplication = {
+                let app = PpsApplication::new();
+                app.register(gio::Cancellable::NONE).unwrap();
+                app
+            };
+        }
+        APPLICATION.with(|_| test());
+    });
+}
+
+pub fn wait_until(description: &str, predicate: impl Fn() -> bool) {
+    glib::MainContext::default().block_on(async {
+        let deadline = Instant::now() + Duration::from_secs(5);
+        while !predicate() {
+            assert!(
+                Instant::now() < deadline,
+                "Timed out waiting for {description}"
+            );
+            glib::timeout_future(Duration::from_millis(10)).await;
+        }
+    });
+}
+
+pub fn fixture(name: &str) -> gio::File {
+    gio::File::for_path(
+        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../test-data")
+            .join(name),
+    )
+}

@@ -3,6 +3,7 @@ resources_conf.set('APP_ID', app_id)
 
 blueprint_sources = [
   'pps-annotation-properties-dialog.blp',
+  'pps-document-tab.blp',
   'pps-document-view.blp',
   'pps-find-sidebar.blp',
   'pps-loader-view.blp',

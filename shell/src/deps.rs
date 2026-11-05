@@ -44,6 +44,7 @@ pub use crate::window::WindowRunMode;
 // All widget types
 pub use crate::annotation_properties_dialog::PpsAnnotationPropertiesDialog;
 pub use crate::application::PpsApplication;
+pub use crate::document_tab::PpsDocumentTab;
 pub use crate::document_view::PpsDocumentView;
 pub use crate::file_monitor::PpsFileMonitor;
 pub use crate::find_sidebar::PpsFindSidebar;

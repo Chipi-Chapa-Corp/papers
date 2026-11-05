@@ -2471,6 +2471,8 @@ pdf_document_forms_reset_form (PpsDocumentForms *document,
 	poppler_document_reset_form (PDF_DOCUMENT (document)->document,
 	                             pps_link_action_get_reset_fields (action),
 	                             pps_link_action_get_exclude_reset_fields (action));
+	self->forms_modified = TRUE;
+	pps_document_set_modified (PPS_DOCUMENT (document), TRUE);
 
 	g_rw_lock_writer_unlock (&self->rwlock);
 }

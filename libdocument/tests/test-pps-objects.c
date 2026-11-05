@@ -2,6 +2,7 @@
 
 #include "pps-annotation.h"
 #include "pps-document-objects-private.h"
+#include "pps-file-exporter-private.h"
 #include "pps-layer.h"
 #include "pps-link.h"
 #include "pps-media-private.h"
@@ -197,6 +198,29 @@ media_temp_file_lifetime (void)
 	g_assert_cmpint (g_rmdir (directory), ==, 0);
 }
 
+static void
+export_error_lifetime (void)
+{
+	GType type = g_type_register_static_simple (G_TYPE_OBJECT, "PpsTestExporter",
+	                                            sizeof (GObjectClass), NULL, sizeof (GObject), NULL, 0);
+	const GInterfaceInfo info = { 0 };
+	g_type_add_interface_static (type, PPS_TYPE_FILE_EXPORTER, &info);
+	g_autoptr (PpsFileExporter) exporter = g_object_new (type, NULL);
+	g_autoptr (GError) error = NULL;
+	g_assert_false (_pps_file_exporter_get_error (exporter, &error));
+	g_assert_no_error (error);
+	_pps_file_exporter_take_error (exporter, g_error_new_literal (G_IO_ERROR, G_IO_ERROR_PERMISSION_DENIED, "First failure"));
+	g_assert_true (_pps_file_exporter_get_error (exporter, NULL));
+	_pps_file_exporter_take_error (exporter, g_error_new_literal (G_IO_ERROR, G_IO_ERROR_FAILED, "Later failure"));
+	g_assert_true (_pps_file_exporter_get_error (exporter, &error));
+	g_assert_error (error, G_IO_ERROR, G_IO_ERROR_PERMISSION_DENIED);
+	_pps_file_exporter_take_error (exporter, NULL);
+	g_assert_false (_pps_file_exporter_get_error (exporter, NULL));
+	g_clear_object (&exporter);
+	/* The returned error is an independent copy. */
+	g_assert_cmpstr (error->message, ==, "First failure");
+}
+
 int
 main (int argc, char **argv)
 {
@@ -210,5 +234,6 @@ main (int argc, char **argv)
 	g_test_add_func ("/document-objects/stamp-surface-lifetime", stamp_surface_lifetime);
 	g_test_add_func ("/document-objects/transition-rectangular-property", transition_rectangular_property);
 	g_test_add_func ("/document-objects/media-temp-file-lifetime", media_temp_file_lifetime);
+	g_test_add_func ("/document-objects/export-error-lifetime", export_error_lifetime);
 	return g_test_run ();
 }

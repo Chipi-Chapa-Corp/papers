@@ -17,6 +17,7 @@
 
 #include "pps-backend-info.h"
 #include "pps-document-factory.h"
+#include "pps-document-factory-private.h"
 #include "pps-file-helpers.h"
 
 /* Backends manager */
@@ -26,9 +27,6 @@
 static GList *pps_backends_list = NULL;
 static GHashTable *pps_module_hash = NULL;
 static gchar *pps_backends_dir = NULL;
-
-static PpsDocument *pps_document_factory_new_document_for_mime_type (const char *mime_type,
-                                                                     GError **error);
 
 static PpsBackendInfo *
 get_backend_info_for_mime_type (const gchar *mime_type)
@@ -60,9 +58,9 @@ get_backend_info_for_document (PpsDocument *document)
 	return info;
 }
 
-static PpsDocument *
-pps_document_factory_new_document_for_mime_type (const gchar *mime_type,
-                                                 GError **error)
+PpsDocument *
+_pps_document_factory_create_document (const gchar *mime_type,
+                                       GError **error)
 {
 	PpsDocument *document;
 	PpsBackendInfo *info;
@@ -195,7 +193,7 @@ new_document_for_uri (const char *uri,
 	if (mime_type == NULL)
 		return NULL;
 
-	document = pps_document_factory_new_document_for_mime_type (mime_type, error);
+	document = _pps_document_factory_create_document (mime_type, error);
 	if (document == NULL)
 		return NULL;
 
@@ -348,7 +346,7 @@ pps_document_factory_get_document_for_fd (int fd,
 		return NULL;
 	}
 
-	return pps_document_factory_new_document_for_mime_type (mime_type, error);
+	return _pps_document_factory_create_document (mime_type, error);
 }
 
 static void

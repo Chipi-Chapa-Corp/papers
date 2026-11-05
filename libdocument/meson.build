@@ -258,8 +258,7 @@ endif
 
 subdir('backend')
 
-document_worker = executable(
-  'papers-document-worker',
+document_worker_sources = files(
   'pps-document-worker.c',
   'pps-document-worker-text.c',
   'pps-document-worker-selection.c',
@@ -273,15 +272,6 @@ document_worker = executable(
   'pps-document-worker-media.c',
   'pps-document-worker-export.c',
   'pps-document-worker-signatures.c',
-  document_dbus[1],
-  include_directories: top_inc,
-  dependencies: libppsdocument_dep,
-  c_args: cflags,
-  install: true,
-  install_dir: get_option('libexecdir'),
 )
-
-worker_env = environment()
-worker_env.set('PPS_DOCUMENT_WORKER', document_worker.full_path())
-backend_env.set('PPS_DOCUMENT_WORKER', document_worker.full_path())
-meson.add_devenv(worker_env)
+document_worker_sources += document_dbus[1]
+document_worker_cflags = cflags

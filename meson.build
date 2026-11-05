@@ -325,6 +325,7 @@ mime_types_conf.set('PACKAGE_ICON_NAME', app_id)
 
 subdir('libdocument')
 subdir('libview')
+subdir('worker')
 subdir('nautilus')
 
 subdir('rust')

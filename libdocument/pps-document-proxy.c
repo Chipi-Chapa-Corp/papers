@@ -17,6 +17,7 @@ typedef struct {
 	char *password;
 	int n_pages;
 	gboolean has_security;
+	guint find_options;
 	gulong closed_handler;
 } PpsDocumentProxyPrivate;
 
@@ -34,6 +35,12 @@ PpsDocumentSession *
 _pps_document_proxy_get_session (PpsDocument *document)
 {
 	return get_private (document)->session;
+}
+
+guint
+_pps_document_proxy_get_find_options (PpsDocument *document)
+{
+	return get_private (document)->find_options;
 }
 
 static gboolean
@@ -75,6 +82,7 @@ read_info (PpsDocument *document, int n_pages, GError **error)
 	priv->backend_name = g_steal_pointer (&backend_name);
 	priv->backend_version = g_steal_pointer (&backend_version);
 	priv->has_security = has_security;
+	g_variant_lookup (metadata, "find-options", "u", &priv->find_options);
 	priv->n_pages = n_pages;
 	return TRUE;
 }
@@ -290,8 +298,20 @@ type_for_interfaces (const char *const *interfaces)
 {
 	static GMutex mutex;
 	GType type;
-	gboolean security = g_strv_contains (interfaces, "PpsDocumentSecurity");
-	const char *name = security ? "PpsSecureDocumentProxy" : "PpsBasicDocumentProxy";
+	guint mask = 0;
+	const struct {
+		GType type;
+		GInterfaceInitFunc init;
+	} capabilities[] = {
+		{ PPS_TYPE_DOCUMENT_SECURITY, (GInterfaceInitFunc) security_iface_init },
+		{ PPS_TYPE_DOCUMENT_TEXT, (GInterfaceInitFunc) _pps_document_proxy_text_iface_init },
+		{ PPS_TYPE_DOCUMENT_FIND, (GInterfaceInitFunc) _pps_document_proxy_find_iface_init },
+	};
+	for (guint i = 0; i < G_N_ELEMENTS (capabilities); i++) {
+		if (g_strv_contains (interfaces, g_type_name (capabilities[i].type)))
+			mask |= 1u << i;
+	}
+	g_autofree char *name = g_strdup_printf ("PpsDocumentProxy%u", mask);
 
 	g_mutex_lock (&mutex);
 	type = g_type_from_name (name);
@@ -299,9 +319,11 @@ type_for_interfaces (const char *const *interfaces)
 		type = g_type_register_static_simple (PPS_TYPE_DOCUMENT_PROXY, name,
 		                                      sizeof (PpsDocumentProxyClass), NULL,
 		                                      sizeof (PpsDocumentProxy), NULL, 0);
-		if (security) {
-			const GInterfaceInfo info = { (GInterfaceInitFunc) security_iface_init, NULL, NULL };
-			g_type_add_interface_static (type, PPS_TYPE_DOCUMENT_SECURITY, &info);
+		for (guint i = 0; i < G_N_ELEMENTS (capabilities); i++) {
+			if (mask & (1u << i)) {
+				const GInterfaceInfo info = { capabilities[i].init, NULL, NULL };
+				g_type_add_interface_static (type, capabilities[i].type, &info);
+			}
 		}
 	}
 	g_mutex_unlock (&mutex);

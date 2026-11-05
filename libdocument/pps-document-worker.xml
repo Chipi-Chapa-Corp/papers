@@ -34,6 +34,38 @@
     <method name="Save">
       <arg name="uri" type="s" direction="in"/>
     </method>
+    <method name="GetText">
+      <arg name="page" type="i" direction="in"/>
+      <arg name="present" type="b" direction="out"/>
+      <arg name="text" type="s" direction="out"/>
+    </method>
+    <method name="GetTextLayout">
+      <arg name="page" type="i" direction="in"/>
+      <arg name="present" type="b" direction="out"/>
+      <arg name="areas" type="a(dddd)" direction="out"/>
+    </method>
+    <method name="GetTextMapping">
+      <arg name="page" type="i" direction="in"/>
+      <arg name="present" type="b" direction="out"/>
+      <arg name="region" type="a(iiii)" direction="out"/>
+    </method>
+    <method name="GetTextAttrs">
+      <arg name="page" type="i" direction="in"/>
+      <arg name="present" type="b" direction="out"/>
+      <arg name="attributes" type="s" direction="out"/>
+    </method>
+    <method name="GetTextInArea">
+      <arg name="page" type="i" direction="in"/>
+      <arg name="area" type="(dddd)" direction="in"/>
+      <arg name="present" type="b" direction="out"/>
+      <arg name="text" type="s" direction="out"/>
+    </method>
+    <method name="FindText">
+      <arg name="page" type="i" direction="in"/>
+      <arg name="text" type="s" direction="in"/>
+      <arg name="options" type="u" direction="in"/>
+      <arg name="matches" type="a(ddddbb)" direction="out"/>
+    </method>
     <method name="Render">
       <annotation name="org.gtk.GDBus.C.UnixFD" value="true"/>
       <arg name="page" type="i" direction="in"/>

@@ -11,11 +11,7 @@
 #include "pps-document-info-private.h"
 #include "pps-document-session-private.h"
 #include "pps-document-signatures.h"
-
-typedef struct {
-	PpsDocument *document;
-	gboolean loaded;
-} Worker;
+#include "pps-document-worker-private.h"
 
 static gboolean
 create_document (PpsDBusDocument *interface,
@@ -137,14 +133,20 @@ load_document_fd (PpsDBusDocument *interface,
 	return TRUE;
 }
 
-static gboolean
-check_page (Worker *worker, int page, GDBusMethodInvocation *invocation)
+gboolean
+pps_document_worker_check_page (Worker *worker, int page, GType capability, GDBusMethodInvocation *invocation)
 {
 	if (!worker->loaded || page < 0 ||
 	    page >= pps_document_get_n_pages (worker->document)) {
 		g_dbus_method_invocation_return_error_literal (
 		    invocation, G_IO_ERROR, G_IO_ERROR_INVALID_ARGUMENT,
 		    "Page is outside the loaded document");
+		return FALSE;
+	}
+	if (capability && !g_type_is_a (G_OBJECT_TYPE (worker->document), capability)) {
+		g_dbus_method_invocation_return_error_literal (
+		    invocation, G_IO_ERROR, G_IO_ERROR_NOT_SUPPORTED,
+		    "The backend does not support this operation");
 		return FALSE;
 	}
 	return TRUE;
@@ -159,7 +161,7 @@ get_page_info (PpsDBusDocument *interface,
 	g_autofree char *label = NULL;
 	double width, height;
 
-	if (!check_page (worker, page, invocation))
+	if (!pps_document_worker_check_page (worker, page, G_TYPE_INVALID, invocation))
 		return TRUE;
 	pps_document_get_page_size (worker->document, page, &width, &height);
 	label = pps_document_get_page_label (worker->document, page);
@@ -174,6 +176,8 @@ get_info (PpsDBusDocument *interface,
           Worker *worker)
 {
 	g_autoptr (PpsDocumentInfo) info = NULL;
+	g_autoptr (GVariant) metadata = NULL;
+	GVariantDict properties;
 	PpsDocumentBackendInfo backend = { 0 };
 	GVariantBuilder pages;
 
@@ -194,8 +198,13 @@ get_info (PpsDBusDocument *interface,
 		g_variant_builder_add (&pages, "(dds)", width, height, label ? label : "");
 	}
 	pps_document_get_backend_info (worker->document, &backend);
+	metadata = g_variant_ref_sink (_pps_document_info_to_variant (info));
+	g_variant_dict_init (&properties, metadata);
+	if (PPS_IS_DOCUMENT_FIND (worker->document))
+		g_variant_dict_insert (&properties, "find-options", "u",
+		                       pps_document_find_get_supported_options (PPS_DOCUMENT_FIND (worker->document)));
 	pps_dbus_document_complete_get_info (interface, invocation,
-	                                     _pps_document_info_to_variant (info),
+	                                     g_variant_dict_end (&properties),
 	                                     g_variant_builder_end (&pages),
 	                                     backend.name ? backend.name : "",
 	                                     backend.version ? backend.version : "",
@@ -249,7 +258,7 @@ render (PpsDBusDocument *interface,
 	GVariant *buffer;
 	double width, height;
 
-	if (!check_page (worker, page_index, invocation))
+	if (!pps_document_worker_check_page (worker, page_index, G_TYPE_INVALID, invocation))
 		return TRUE;
 	if (rotation < 0 || rotation > 270 || rotation % 90 != 0 ||
 	    !isfinite (scale) ||
@@ -337,6 +346,7 @@ main (int argc, char **argv)
 	g_signal_connect (interface, "handle-get-info", G_CALLBACK (get_info), &worker);
 	g_signal_connect (interface, "handle-save", G_CALLBACK (save_document), &worker);
 	g_signal_connect (interface, "handle-render", G_CALLBACK (render), &worker);
+	pps_document_worker_bind_text (&worker, interface);
 	if (!g_dbus_interface_skeleton_export (G_DBUS_INTERFACE_SKELETON (interface),
 	                                       connection, PPS_DOCUMENT_WORKER_PATH, &error)) {
 		pps_shutdown ();

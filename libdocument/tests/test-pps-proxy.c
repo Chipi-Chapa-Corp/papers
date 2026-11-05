@@ -4,6 +4,7 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <glib/gstdio.h>
+#include <math.h>
 #include <signal.h>
 #include <sys/wait.h>
 #include <unistd.h>
@@ -115,7 +116,10 @@ fd_and_save (void)
 	g_autoptr (GError) error = NULL;
 	g_autofree char *path = g_build_filename (fixture_dir, "saved.pdf", NULL);
 	g_autofree char *uri = g_filename_to_uri (path, NULL, NULL);
-	int fd = open (fixture_path, O_RDONLY | O_CLOEXEC);
+	int original = open (fixture_path, O_RDONLY | O_CLOEXEC);
+	/* Keep the consumed descriptor away from normal transport allocations. */
+	int fd = fcntl (original, F_DUPFD_CLOEXEC, 128);
+	close (original);
 
 	g_assert_cmpint (fd, >=, 0);
 	g_assert_true (pps_document_load_fd (document, fd, &error));
@@ -170,6 +174,60 @@ failure_and_lifetime (void)
 }
 
 static void
+text_and_find (void)
+{
+	g_autoptr (PpsDocument) document = new_document ();
+	load_document (document, fixture_uri);
+	g_assert_true (PPS_IS_DOCUMENT_TEXT (document));
+	g_assert_true (PPS_IS_DOCUMENT_FIND (document));
+	g_autoptr (PpsPage) page = pps_document_get_page (document, 0);
+	PpsDocumentText *text_document = PPS_DOCUMENT_TEXT (document);
+	PpsDocumentFind *find_document = PPS_DOCUMENT_FIND (document);
+	g_autofree char *text = pps_document_text_get_text (text_document, page);
+	g_assert_cmpstr (text, ==, "First page\ncontinued\nhyphen-\nation");
+	g_autofree PpsRectangle *areas = NULL;
+	guint count = 0;
+	g_assert_true (pps_document_text_get_text_layout (text_document, page, &areas, &count));
+	g_assert_cmpuint (count, ==, g_utf8_strlen (text, -1));
+	g_assert_cmpfloat (areas[0].x1, <, areas[0].x2);
+	g_assert_cmpfloat (areas[0].y1, <, areas[0].y2);
+	cairo_region_t *mapping = pps_document_text_get_text_mapping (text_document, page);
+	g_assert_nonnull (mapping);
+	g_assert_false (cairo_region_is_empty (mapping));
+	cairo_region_destroy (mapping);
+	g_autoptr (PangoAttrList) attrs = pps_document_text_get_text_attrs (text_document, page);
+	g_assert_nonnull (attrs);
+	PangoAttrIterator *iterator = pango_attr_list_get_iterator (attrs);
+	PangoAttribute *size = pango_attr_iterator_get (iterator, PANGO_ATTR_SIZE);
+	g_assert_nonnull (size);
+	g_assert_cmpint (((PangoAttrInt *) size)->value, ==, 16 * PANGO_SCALE);
+	pango_attr_iterator_destroy (iterator);
+	PpsRectangle area = { areas[0].x1, areas[0].y1, areas[9].x2, areas[0].y2 };
+	g_autofree char *part = pps_document_text_get_text_in_area (text_document, page, &area);
+	g_assert_cmpstr (part, ==, "First page");
+	g_assert_cmpuint (pps_document_find_get_supported_options (find_document), ==,
+	                  PPS_FIND_CASE_SENSITIVE | PPS_FIND_WHOLE_WORDS_ONLY);
+	GList *matches = pps_document_find_find_text (find_document, page, "first", PPS_FIND_DEFAULT);
+	g_assert_cmpuint (g_list_length (matches), ==, 1);
+	g_list_free_full (matches, (GDestroyNotify) pps_find_rectangle_free);
+	g_assert_null (pps_document_find_find_text (find_document, page, "first", PPS_FIND_CASE_SENSITIVE));
+	g_assert_null (pps_document_find_find_text (find_document, page, "Fir", PPS_FIND_WHOLE_WORDS_ONLY));
+	matches = pps_document_find_find_text (find_document, page, "page continued", PPS_FIND_DEFAULT);
+	g_assert_cmpuint (g_list_length (matches), ==, 2);
+	g_assert_true (((PpsFindRectangle *) matches->data)->next_line);
+	g_assert_false (((PpsFindRectangle *) matches->data)->after_hyphen);
+	g_list_free_full (matches, (GDestroyNotify) pps_find_rectangle_free);
+	matches = pps_document_find_find_text (find_document, page, "hyphenation", PPS_FIND_DEFAULT);
+	g_assert_cmpuint (g_list_length (matches), ==, 2);
+	g_assert_true (((PpsFindRectangle *) matches->data)->next_line);
+	g_assert_true (((PpsFindRectangle *) matches->data)->after_hyphen);
+	g_list_free_full (matches, (GDestroyNotify) pps_find_rectangle_free);
+	area.x1 = NAN;
+	g_assert_null (pps_document_text_get_text_in_area (text_document, page, &area));
+	render_page (document, 1);
+}
+
+static void
 create_fixture (void)
 {
 	g_autoptr (GError) error = NULL;
@@ -188,6 +246,14 @@ create_fixture (void)
 		cairo_set_font_size (cr, 16);
 		cairo_move_to (cr, 10, 30);
 		cairo_show_text (cr, i ? "Second page" : "First page");
+		if (!i) {
+			cairo_move_to (cr, 10, 55);
+			cairo_show_text (cr, "continued");
+			cairo_move_to (cr, 10, 80);
+			cairo_show_text (cr, "hyphen-");
+			cairo_move_to (cr, 10, 105);
+			cairo_show_text (cr, "ation");
+		}
 		cairo_show_page (cr);
 	}
 	g_assert_cmpint (cairo_status (cr), ==, CAIRO_STATUS_SUCCESS);
@@ -206,6 +272,7 @@ main (int argc, char **argv)
 	g_test_add_func ("/document-proxy/password-retry", password_retry);
 	g_test_add_func ("/document-proxy/fd-and-save", fd_and_save);
 	g_test_add_func ("/document-proxy/failure-and-lifetime", failure_and_lifetime);
+	g_test_add_func ("/document-proxy/text-and-find", text_and_find);
 	int result = g_test_run ();
 	g_unlink (fixture_path);
 	g_rmdir (fixture_dir);

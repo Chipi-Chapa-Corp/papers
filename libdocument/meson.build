@@ -170,6 +170,7 @@ libppsdocument = shared_library(
     'pps-document-buffer.c',
     'pps-document-info-variant.c',
     'pps-document-proxy.c',
+    'pps-document-proxy-text.c',
     'pps-document-geometry.c',
   ],
   include_directories: top_inc,
@@ -238,6 +239,7 @@ subdir('backend')
 document_worker = executable(
   'papers-document-worker',
   'pps-document-worker.c',
+  'pps-document-worker-text.c',
   document_dbus[1],
   include_directories: top_inc,
   dependencies: libppsdocument_dep,

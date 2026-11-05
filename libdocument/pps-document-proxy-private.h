@@ -2,7 +2,9 @@
 
 #pragma once
 
+#include "pps-document-find.h"
 #include "pps-document-session-private.h"
+#include "pps-document-text.h"
 #include "pps-document.h"
 
 #define PPS_TYPE_DOCUMENT_PROXY (pps_document_proxy_get_type ())
@@ -20,3 +22,8 @@ PpsDocument *_pps_document_proxy_new (const char *mime_type,
                                       GError **error);
 PPS_PRIVATE
 PpsDocumentSession *_pps_document_proxy_get_session (PpsDocument *document);
+PPS_PRIVATE
+guint _pps_document_proxy_get_find_options (PpsDocument *document);
+
+void _pps_document_proxy_text_iface_init (PpsDocumentTextInterface *iface);
+void _pps_document_proxy_find_iface_init (PpsDocumentFindInterface *iface);

@@ -397,6 +397,9 @@ struct _PpsPrintOperationExport {
 
 	guint idle_id;
 	gboolean exporting;
+	gboolean job_pending;
+	gboolean cancelled;
+	gboolean done;
 
 	/* Context */
 	PpsFileExporterContext fc;
@@ -477,20 +480,16 @@ pps_print_queue_push (PpsPrintOperation *op)
 	g_queue_push_head (queue, g_object_ref (op));
 }
 
-static PpsPrintOperation *
-pps_print_queue_pop (PpsDocument *document)
+static gboolean
+pps_print_queue_remove (PpsPrintOperation *op)
 {
-	PpsPrintOperation *op;
-	GQueue *queue;
-
-	queue = g_hash_table_lookup (print_queue, document);
-	if (!queue || g_queue_is_empty (queue))
-		return NULL;
-
-	op = g_queue_pop_tail (queue);
-	g_object_unref (op);
-
-	return op;
+	GQueue *queue = print_queue ? g_hash_table_lookup (print_queue, op->document) : NULL;
+	if (!queue)
+		return FALSE;
+	gboolean current = g_queue_peek_tail (queue) == op;
+	if (g_queue_remove (queue, op))
+		g_object_unref (op);
+	return current;
 }
 
 static PpsPrintOperation *
@@ -850,12 +849,14 @@ static void
 pps_print_operation_export_run_next (PpsPrintOperationExport *export)
 {
 	PpsPrintOperation *op = PPS_PRINT_OPERATION (export);
+	g_autoptr (GObject) hold = g_object_ref (G_OBJECT (export));
 	PpsPrintOperation *next;
 	PpsDocument *document;
 
 	/* First pop the current job */
 	document = op->document;
-	pps_print_queue_pop (document);
+	if (!pps_print_queue_remove (op))
+		return;
 
 	next = pps_print_queue_peek (document);
 	if (next)
@@ -930,6 +931,11 @@ export_job_finished (PpsJobExport *job,
                      PpsPrintOperationExport *export)
 {
 	PpsPrintOperation *op = PPS_PRINT_OPERATION (export);
+	export->job_pending = FALSE;
+	if (export->cancelled) {
+		export_cancel (export);
+		return;
+	}
 	if (!pps_job_is_succeeded (PPS_JOB (job), &export->error)) {
 		export_finish (export, GTK_PRINT_OPERATION_RESULT_ERROR);
 		return;
@@ -954,18 +960,15 @@ export_job_finished (PpsJobExport *job,
 }
 
 static void
-export_job_cancelled (PpsJobExport *job,
-                      PpsPrintOperationExport *export)
-{
-	export_cancel (export);
-}
-
-static void
 export_finish (PpsPrintOperationExport *export, GtkPrintOperationResult result)
 {
+	if (export->done)
+		return;
+	g_assert (!export->job_pending);
+	export->done = TRUE;
 	PpsPrintOperation *op = PPS_PRINT_OPERATION (export);
 	g_autoptr (GObject) hold = g_object_ref (G_OBJECT (export));
-	if (result == GTK_PRINT_OPERATION_RESULT_ERROR && export->exporting) {
+	if (export->exporting) {
 		pps_file_exporter_end (PPS_FILE_EXPORTER (op->document));
 		export->exporting = FALSE;
 	}
@@ -975,9 +978,6 @@ export_finish (PpsPrintOperationExport *export, GtkPrintOperationResult result)
 	if (export->job_export) {
 		g_signal_handlers_disconnect_by_func (export->job_export,
 		                                      export_job_finished,
-		                                      export);
-		g_signal_handlers_disconnect_by_func (export->job_export,
-		                                      export_job_cancelled,
 		                                      export);
 		g_clear_object (&export->job_export);
 	}
@@ -1096,12 +1096,10 @@ export_print_page (PpsPrintOperationExport *export)
 		g_signal_connect (export->job_export, "finished",
 		                  G_CALLBACK (export_job_finished),
 		                  (gpointer) export);
-		g_signal_connect (export->job_export, "cancelled",
-		                  G_CALLBACK (export_job_cancelled),
-		                  (gpointer) export);
 	}
 
 	pps_job_export_set_page (PPS_JOB_EXPORT (export->job_export), export->page);
+	export->job_pending = TRUE;
 	pps_job_scheduler_push_job (export->job_export, PPS_JOB_PRIORITY_NONE);
 
 	update_progress (export);
@@ -1114,7 +1112,7 @@ pps_print_operation_export_begin (PpsPrintOperationExport *export)
 {
 	PpsPrintOperation *op = PPS_PRINT_OPERATION (export);
 
-	if (!export->temp_file)
+	if (export->done || export->exporting || !export->temp_file)
 		return; /* cancelled */
 
 	export->exporting = TRUE;
@@ -1153,13 +1151,13 @@ static void
 pps_print_operation_export_cancel (PpsPrintOperation *op)
 {
 	PpsPrintOperationExport *export = PPS_PRINT_OPERATION_EXPORT (op);
-
-	if (export->job_export &&
-	    !pps_job_is_finished (export->job_export)) {
-		pps_job_cancel (export->job_export);
-	} else {
+	if (export->done)
+		return;
+	export->cancelled = TRUE;
+	/* Cancellation cannot replace or finish the backend context while its
+	 * current page is still using it. The finished callback drains that page. */
+	if (!export->job_pending)
 		export_cancel (export);
-	}
 }
 
 static void
@@ -1421,9 +1419,6 @@ pps_print_operation_export_finalize (GObject *object)
 			pps_job_cancel (export->job_export);
 		g_signal_handlers_disconnect_by_func (export->job_export,
 		                                      export_job_finished,
-		                                      export);
-		g_signal_handlers_disconnect_by_func (export->job_export,
-		                                      export_job_cancelled,
 		                                      export);
 		g_clear_object (&export->job_export);
 	}

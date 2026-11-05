@@ -274,6 +274,16 @@ pps_signature_get_signature_left (PpsSignature *self)
 	return priv->signature_left;
 }
 
+void
+pps_signature_set_password (PpsSignature *self,
+                            const char *password)
+{
+	PpsSignaturePrivate *priv = GET_SIG_PRIVATE (self);
+
+	g_free (priv->password);
+	priv->password = g_strdup (password);
+}
+
 const char *
 pps_signature_get_password (PpsSignature *self)
 {

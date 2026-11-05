@@ -268,6 +268,21 @@ signature_certificate_lifetime (void)
 	g_assert_cmpstr (id, ==, "signer");
 }
 
+static void
+signature_password (void)
+{
+	g_autoptr (PpsSignature) signature = g_object_new (PPS_TYPE_SIGNATURE, NULL);
+	g_assert_null (pps_signature_get_password (signature));
+	g_autofree char *password = g_strdup ("test password");
+	pps_signature_set_password (signature, password);
+	g_clear_pointer (&password, g_free);
+	g_assert_cmpstr (pps_signature_get_password (signature), ==, "test password");
+	pps_signature_set_password (signature, "replacement");
+	g_assert_cmpstr (pps_signature_get_password (signature), ==, "replacement");
+	pps_signature_set_password (signature, NULL);
+	g_assert_null (pps_signature_get_password (signature));
+}
+
 int
 main (int argc, char **argv)
 {
@@ -284,5 +299,6 @@ main (int argc, char **argv)
 	g_test_add_func ("/document-objects/export-error-lifetime", export_error_lifetime);
 	g_test_add_func ("/document-objects/signature-date-properties", signature_date_properties);
 	g_test_add_func ("/document-objects/signature-certificate-lifetime", signature_certificate_lifetime);
+	g_test_add_func ("/document-objects/signature-password", signature_password);
 	return g_test_run ();
 }

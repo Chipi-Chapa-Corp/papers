@@ -3,7 +3,10 @@
 #include <fcntl.h>
 #include <gio/gunixfdlist.h>
 #include <math.h>
+#include <poll.h>
 #include <signal.h>
+#include <sys/ptrace.h>
+#include <sys/syscall.h>
 #include <sys/wait.h>
 #include <unistd.h>
 
@@ -430,15 +433,64 @@ startup_failure (gconstpointer data)
 	g_assert_nonnull (error);
 }
 
+static void
+parent_death (void)
+{
+	g_autoptr (GError) error = NULL;
+	g_autofree char *executable = g_file_read_link ("/proc/self/exe", &error);
+	g_assert_no_error (error);
+	g_autoptr (GSubprocess) parent = g_subprocess_new (G_SUBPROCESS_FLAGS_STDOUT_PIPE, &error, executable, "--worker-parent", NULL);
+	g_assert_no_error (error);
+	g_autoptr (GDataInputStream) input = g_data_input_stream_new (g_subprocess_get_stdout_pipe (parent));
+	g_autofree char *line = g_data_input_stream_read_line (input, NULL, NULL, &error);
+	g_assert_no_error (error);
+	g_assert_nonnull (line);
+	pid_t worker = g_ascii_strtoll (line, NULL, 10);
+	g_assert_cmpint (worker, >, 1);
+	int pidfd = syscall (SYS_pidfd_open, worker, 0);
+	g_assert_cmpint (pidfd, >=, 0);
+	/* Stop only the dispatch thread, leaving the parent's socket watcher live. */
+	gboolean traced = ptrace (PTRACE_SEIZE, worker, NULL, NULL) == 0;
+	if (traced) {
+		g_assert_cmpint (ptrace (PTRACE_INTERRUPT, worker, NULL, NULL), ==, 0);
+		int status;
+		g_assert_cmpint (waitpid (worker, &status, 0), ==, worker);
+		g_assert_true (WIFSTOPPED (status));
+	}
+	g_subprocess_force_exit (parent);
+	g_assert_true (g_subprocess_wait (parent, NULL, &error));
+	g_assert_no_error (error);
+	struct pollfd fd = { pidfd, POLLIN, 0 };
+	int exited = poll (&fd, 1, 3000);
+	if (exited != 1)
+		kill (worker, SIGKILL);
+	if (traced) {
+		int status;
+		waitpid (worker, &status, 0);
+	}
+	close (pidfd);
+	g_assert_cmpint (exited, ==, 1);
+	if (!traced)
+		g_test_message ("Dispatch-thread suspension unavailable; verified parent-death cleanup without suspension");
+}
+
 int
 main (int argc, char **argv)
 {
+	if (argc == 2 && g_str_equal (argv[1], "--worker-parent")) {
+		g_autoptr (PpsDocumentSession) session = new_session ();
+		g_print ("%s\n", g_subprocess_get_identifier (session->process));
+		g_autoptr (GMainLoop) loop = g_main_loop_new (NULL, FALSE);
+		g_main_loop_run (loop);
+		return 0;
+	}
 	g_test_init (&argc, &argv, NULL);
 	g_test_add_func ("/document-worker/load-and-password", load_and_password);
 	g_test_add_func ("/document-worker/load-fd", load_fd);
 	g_test_add_func ("/document-worker/invalid-requests", reject_invalid_requests);
 	g_test_add_func ("/document-worker/independent-failure", worker_failure_is_independent);
 	g_test_add_func ("/document-worker/disconnect", disconnect_stops_worker);
+	g_test_add_func ("/document-worker/parent-death", parent_death);
 	g_test_add_func ("/document-worker/cancel-startup", cancel_startup);
 	g_test_add_func ("/document-worker/render", render_pages);
 	g_test_add_data_func ("/document-worker/pending-crash", GINT_TO_POINTER (TRUE), pending_request);

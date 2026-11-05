@@ -2,9 +2,13 @@
 
 #include "config.h"
 
+#include <errno.h>
+#include <fcntl.h>
 #include <gio/gunixfdlist.h>
 #include <math.h>
 #include <papers-document.h>
+#include <sys/syscall.h>
+#include <unistd.h>
 
 #include "pps-document-annotation-private.h"
 #include "pps-document-buffer-private.h"
@@ -13,6 +17,30 @@
 #include "pps-document-session-private.h"
 #include "pps-document-signatures.h"
 #include "pps-document-worker-private.h"
+
+typedef struct {
+	int socket;
+	pid_t parent;
+	gboolean process;
+} ParentWatch;
+
+static gpointer
+watch_parent (gpointer data)
+{
+	ParentWatch *watch = data;
+	GPollFD fd = { watch->socket, watch->process ? G_IO_IN : G_IO_HUP | G_IO_ERR | G_IO_NVAL, 0 };
+	while (g_poll (&fd, 1, -1) == -1 && errno == EINTR) {
+	}
+	/* The dispatch thread may be inside a backend call. Parent death must not
+	 * depend on that call returning. Normal disconnects retain normal cleanup. */
+	if (!watch->process) {
+		/* On older kernels, the socket can close just before reparenting.
+		 * Normal shutdown exits the process while this fallback waits. */
+		while (getppid () == watch->parent)
+			g_usleep (10 * 1000);
+	}
+	_exit (0);
+}
 
 static gboolean
 create_document (PpsDBusDocument *interface,
@@ -378,6 +406,16 @@ main (int argc, char **argv)
 	socket = g_socket_new_from_fd (PPS_DOCUMENT_WORKER_FD, &error);
 	if (!socket)
 		goto failed;
+	pid_t parent = getppid ();
+	int monitor_fd = syscall (SYS_pidfd_open, parent, 0);
+	gboolean process = monitor_fd != -1;
+	if (monitor_fd == -1)
+		monitor_fd = fcntl (PPS_DOCUMENT_WORKER_FD, F_DUPFD_CLOEXEC, 0);
+	if (monitor_fd != -1) {
+		ParentWatch *watch = g_new (ParentWatch, 1);
+		*watch = (ParentWatch){ monitor_fd, parent, process };
+		g_thread_unref (g_thread_new ("parent-watch", watch_parent, watch));
+	}
 	stream = g_socket_connection_factory_create_connection (socket);
 	connection = g_dbus_connection_new_sync (
 	    G_IO_STREAM (stream), guid,

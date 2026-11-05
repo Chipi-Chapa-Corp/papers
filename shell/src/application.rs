@@ -115,7 +115,7 @@ mod imp {
                             dest = Some(uri_dest);
                         }
 
-                        let f = gio::File::for_commandline_arg(arg);
+                        let f = command_line.create_file_for_arg(arg);
                         self.open_file_at_dest(&f, dest.as_ref(), mode);
                     }
                 }
@@ -161,39 +161,25 @@ mod imp {
             window.present();
         }
 
-        fn open_file_at_dest(
+        pub(super) fn open_file_at_dest(
             &self,
             file: &gio::File,
             dest: Option<&papers_document::LinkDest>,
             mode: Option<WindowRunMode>,
         ) {
             let obj = self.obj();
-            let mut n_window = 0;
-            let mut window = None;
-            let uri = file.uri();
-
-            for w in obj
+            let windows: Vec<_> = obj
                 .windows()
                 .into_iter()
                 .filter_map(|w| w.downcast::<PpsWindow>().ok())
-            {
-                if w.is_empty() || w.uri().is_some_and(|u| u == uri) {
-                    window = Some(w.clone());
-                }
-
-                n_window += 1;
-            }
-
-            if n_window != 0 && window.is_none() {
-                // There are windows, but they hold a different document.
-                // Since we don't have security between documents, then
-                // spawn a new process! See:
-                // https://gitlab.gnome.org/GNOME/papers/-/issues/104
-                spawn(Some(file), dest, mode);
-                return;
-            }
-
-            let window = window.unwrap_or_default();
+                .collect();
+            let window = windows
+                .iter()
+                .find(|w| w.contains_file(file))
+                .cloned()
+                .or_else(|| obj.active_window().and_downcast::<PpsWindow>())
+                .or_else(|| windows.first().cloned())
+                .unwrap_or_default();
 
             // We need to load uri before showing the window, so
             // we can restore window size without flickering
@@ -354,9 +340,8 @@ mod imp {
                     ))
                     .build(),
                 gio::ActionEntryBuilder::new("new")
-                    .activate(|_, _, _| {
-                        // spawn an empty window
-                        spawn(None, None, None);
+                    .activate(|app: &super::PpsApplication, _, _| {
+                        app.imp().open_start_view();
                     })
                     .build(),
             ];
@@ -465,9 +450,8 @@ impl Default for PpsApplication {
 
 impl PpsApplication {
     pub fn new() -> Self {
-        let flags = gio::ApplicationFlags::HANDLES_COMMAND_LINE
-            | gio::ApplicationFlags::NON_UNIQUE
-            | gio::ApplicationFlags::HANDLES_OPEN;
+        let flags =
+            gio::ApplicationFlags::HANDLES_COMMAND_LINE | gio::ApplicationFlags::HANDLES_OPEN;
 
         glib::Object::builder()
             .property("application-id", APP_ID)
@@ -565,5 +549,46 @@ pub fn spawn(file: Option<&gio::File>, dest: Option<&LinkDest>, mode: Option<Win
                 e.message()
             );
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::tests::{fixture, wait_until};
+
+    #[test]
+    fn application_opens_files_in_tabs_and_finds_background_documents() {
+        crate::tests::run(|| {
+            let app = gio::Application::default()
+                .unwrap()
+                .downcast::<PpsApplication>()
+                .unwrap();
+            let first = fixture("utf16le-annot.pdf");
+            let second = fixture("ink_annotations.pdf");
+            app.open(std::slice::from_ref(&first), "");
+            let window = app.windows()[0].clone().downcast::<PpsWindow>().unwrap();
+            wait_until("first document", || window.document().is_some());
+            let document = window.document().unwrap();
+            assert!(document.type_().name().starts_with("PpsDocumentProxy"));
+            app.open(std::slice::from_ref(&second), "");
+            assert_eq!(app.windows().len(), 1);
+            assert!(window.contains_file(&first));
+            assert!(window.contains_file(&second));
+            wait_until("second document", || {
+                window.document().is_some_and(|d| d != document)
+            });
+            app.open(std::slice::from_ref(&first), "");
+            assert_eq!(window.document(), Some(document.clone()));
+
+            app.activate_action("new", None);
+            assert_eq!(app.windows().len(), 2);
+            app.open(std::slice::from_ref(&first), "");
+            assert_eq!(window.document(), Some(document));
+            assert!(glib::Type::from_name("PdfDocument").is_none());
+            for window in app.windows() {
+                window.close();
+            }
+        });
     }
 }

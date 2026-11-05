@@ -610,6 +610,21 @@ impl PpsWindow {
         self.imp().current_tab().and_then(|tab| tab.uri())
     }
 
+    pub fn contains_file(&self, file: &gio::File) -> bool {
+        self.imp()
+            .tabs
+            .pages()
+            .iter::<adw::TabPage>()
+            .flatten()
+            .any(|page| {
+                page.child()
+                    .downcast::<PpsDocumentTab>()
+                    .unwrap()
+                    .uri()
+                    .is_some_and(|uri| gio::File::for_uri(&uri).equal(file))
+            })
+    }
+
     pub fn open(
         &self,
         file: &gio::File,

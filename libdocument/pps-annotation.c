@@ -1470,7 +1470,8 @@ pps_path_new_for_array (const PpsPoint *points, guint n_points)
 	PpsPath *path = g_new (PpsPath, 1);
 	path->n_points = n_points;
 	path->points = g_new (PpsPoint, n_points);
-	memcpy (path->points, points, sizeof (PpsPoint) * n_points);
+	if (n_points)
+		memcpy (path->points, points, sizeof (PpsPoint) * n_points);
 	return path;
 }
 /**
@@ -1521,7 +1522,8 @@ pps_path_copy_array (PpsPath *path, gsize *n_points)
 {
 	PpsPoint *points;
 	points = g_new (PpsPoint, path->n_points);
-	memcpy (points, path->points, sizeof (PpsPoint) * path->n_points);
+	if (path->n_points)
+		memcpy (points, path->points, sizeof (PpsPoint) * path->n_points);
 	*n_points = path->n_points;
 	return points;
 }
@@ -1629,7 +1631,6 @@ pps_annotation_ink_finalize (GObject *object)
 		pps_ink_list_free (priv->ink_list);
 		priv->ink_list = NULL;
 	}
-
 	g_clear_slist (&priv->time_list, g_free);
 
 	G_OBJECT_CLASS (pps_annotation_ink_parent_class)->finalize (object);

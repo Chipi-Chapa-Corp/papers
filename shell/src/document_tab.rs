@@ -1138,8 +1138,8 @@ impl PpsDocumentTab {
     pub fn print_range(&self, first_page: i32, last_page: i32) {
         self.imp().document_view.print_range(first_page, last_page);
     }
-    pub fn request_close(&self) {
-        self.imp().document_view.request_close();
+    pub fn request_close(&self) -> bool {
+        self.imp().document_view.request_close()
     }
     pub fn set_fullscreen_mode(&self, fullscreened: bool) {
         self.imp().document_view.set_fullscreen_mode(fullscreened);

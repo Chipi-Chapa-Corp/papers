@@ -218,7 +218,11 @@ fn tabs_reorder_transfer_and_close_through_their_current_window() {
             .unwrap()
             .add_annotation(&annotation);
         assert!(tabs.page(&second).indicator_icon().is_some());
-        window.new_tab();
+        let empty = window.new_tab();
+        tabs.close_page(&tabs.page(&second));
+        assert_eq!(window.imp().current_tab(), Some(second.clone()));
+        window.visible_dialog().unwrap().force_close();
+        tabs.set_selected_page(&tabs.page(&empty));
         window.close();
         window.visible_dialog().unwrap().force_close();
         wait_until("canceled window close", || !window.imp().closing.get());

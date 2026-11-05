@@ -349,11 +349,15 @@ mod imp {
                     | adw::TabViewShortcuts::CONTROL_PAGE_UP
                     | adw::TabViewShortcuts::CONTROL_PAGE_DOWN,
             );
-            self.tabs.connect_close_page(|_, page| {
-                page.child()
+            self.tabs.connect_close_page(|view, page| {
+                if page
+                    .child()
                     .downcast::<PpsDocumentTab>()
                     .unwrap()
-                    .request_close();
+                    .request_close()
+                {
+                    view.set_selected_page(page);
+                }
                 glib::Propagation::Stop
             });
             self.tabs.connect_selected_page_notify(glib::clone!(

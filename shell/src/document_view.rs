@@ -873,14 +873,15 @@ mod imp {
             true
         }
 
-        pub(super) fn request_close(&self) {
+        pub(super) fn request_close(&self) -> bool {
             if self.closing.replace(true) {
-                return;
+                return true;
             }
 
             if !self.check_document_modified() {
                 self.finish_close(true);
             }
+            self.closing.get()
         }
 
         pub(super) fn finish_close(&self, allowed: bool) {
@@ -952,7 +953,7 @@ impl PpsDocumentView {
         self.imp().model.set_inverted_colors(inverted);
     }
 
-    pub fn request_close(&self) {
+    pub fn request_close(&self) -> bool {
         self.imp().request_close()
     }
 

@@ -7,7 +7,22 @@
 static GVariant *
 encode_field (GObject *object, gpointer data)
 {
-	return _pps_form_field_to_variant (PPS_FORM_FIELD (object), data);
+	Worker *worker = data;
+	PpsFormField *field = PPS_FORM_FIELD (object);
+	PpsDocumentForms *forms = PPS_DOCUMENT_FORMS (worker->document);
+	/* Refresh values without replacing the native object behind its handle. */
+	if (PPS_IS_FORM_FIELD_TEXT (field)) {
+		PpsFormFieldText *text = PPS_FORM_FIELD_TEXT (field);
+		g_free (text->text);
+		text->text = pps_document_forms_form_field_text_get_text (forms, field);
+	} else if (PPS_IS_FORM_FIELD_BUTTON (field)) {
+		PPS_FORM_FIELD_BUTTON (field)->state = pps_document_forms_form_field_button_get_state (forms, field);
+	} else if (PPS_IS_FORM_FIELD_CHOICE (field) && PPS_FORM_FIELD_CHOICE (field)->is_editable) {
+		PpsFormFieldChoice *choice = PPS_FORM_FIELD_CHOICE (field);
+		g_free (choice->text);
+		choice->text = pps_document_forms_form_field_choice_get_text (forms, field);
+	}
+	return _pps_form_field_to_variant (field, worker->objects);
 }
 
 static gboolean
@@ -25,7 +40,7 @@ get_fields (PpsDBusDocument *interface, GDBusMethodInvocation *invocation, int i
 			g_hash_table_insert (worker->forms, GINT_TO_POINTER (index), mappings);
 	}
 	pps_dbus_document_complete_get_form_fields (interface, invocation, mappings != NULL,
-	                                            _pps_mapping_list_to_variant (mappings, encode_field, worker->objects));
+	                                            _pps_mapping_list_to_variant (mappings, encode_field, worker));
 	return TRUE;
 }
 

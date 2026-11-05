@@ -140,21 +140,9 @@ _pps_form_field_from_variant (GVariant *value, PpsDocumentObjects *objects, GErr
 	field->changed = changed;
 	field->activation_link = g_steal_pointer (&link);
 	pps_form_field_set_alternate_name (field, g_steal_pointer (&alternate));
-	/* Re-reading mappings must not replace a field being edited by an overlay. */
-	GObject *existing = _pps_document_objects_lookup (objects, handle, G_OBJECT_TYPE (field));
-	if (existing) {
-		PpsFormField *previous = PPS_FORM_FIELD (existing);
-		if (previous->id != id || (previous->page ? previous->page->index : -1) != page)
-			goto invalid;
-		return g_object_ref (previous);
-	}
-	if (!_pps_document_objects_import (objects, handle, G_OBJECT (field))) {
-		existing = _pps_document_objects_lookup (objects, handle, G_OBJECT_TYPE (field));
-		if (existing && PPS_FORM_FIELD (existing)->id == id &&
-		    (PPS_FORM_FIELD (existing)->page ? PPS_FORM_FIELD (existing)->page->index : -1) == page)
-			return g_object_ref (PPS_FORM_FIELD (existing));
+	/* Each page cache owns its overlay's edit state, as with native fields. */
+	if (!_pps_document_objects_bind (objects, handle, G_OBJECT (field)))
 		goto invalid;
-	}
 	return g_steal_pointer (&field);
 invalid:
 	if (!error || !*error)

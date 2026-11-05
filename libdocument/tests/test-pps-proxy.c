@@ -403,7 +403,7 @@ create_forms_fixture (void)
 		"<< /Type /Annot /Subtype /Widget /Parent 12 0 R /TU (Radio A) /AS /A /AP << /N << /Off 15 0 R /A 16 0 R >> >> /Rect [10 120 30 140] /P 3 0 R >>",
 		"<< /Type /Annot /Subtype /Widget /Parent 12 0 R /TU (Radio B) /AS /Off /AP << /N << /Off 15 0 R /B 16 0 R >> >> /Rect [40 120 60 140] /P 3 0 R >>",
 		"<< /Type /XObject /Subtype /Form /BBox [0 0 20 20] /Length 0 >>\nstream\nendstream",
-		"<< /Type /XObject /Subtype /Form /BBox [0 0 20 20] /Length 23 >>\nstream\n0 0 0 rg 0 0 20 20 re f\nendstream",
+		"<< /Type /XObject /Subtype /Form /BBox [0 0 20 20] /Length 24 >>\nstream\n0 0 0 rg 0 0 20 20 re f\nendstream",
 		"<< /Type /Annot /Subtype /Widget /FT /Btn /Ff 65536 /T (reset) /TU (Reset) /A << /S /ResetForm /Fields [(text)] /Flags 0 >> /Rect [10 80 100 105] /P 3 0 R >>",
 		"<< /Type /Annot /Subtype /Widget /FT /Sig /T (signature) /TU (Signature) /Rect [10 40 150 65] /P 3 0 R >>",
 		"<< /Type /Annot /Subtype /Widget /FT /Tx /T (readonly) /TU (Read only) /Ff 1 /V (fixed) /Rect [180 350 320 375] /P 3 0 R >>"
@@ -478,12 +478,17 @@ forms_edit_and_save (void)
 	g_assert_false (pps_document_forms_document_is_modified (forms));
 	guint notifications = 0;
 	g_signal_connect (document, "notify::modified", G_CALLBACK (modified_notified), &notifications);
-	/* A page-cache refresh must preserve an active overlay's unsaved text. */
+	/* Separate page caches must not share their overlays' temporary edit state. */
 	g_free (PPS_FORM_FIELD_TEXT (text)->text);
 	PPS_FORM_FIELD_TEXT (text)->text = g_strdup ("Pending overlay edit");
 	text->changed = TRUE;
 	PpsMappingList *again = pps_document_forms_get_form_fields (forms, page);
-	g_assert_true (find_field (again, "Text") == text);
+	PpsFormField *other_text = find_field (again, "Text");
+	g_assert_true (other_text != text);
+	g_assert_false (other_text->changed);
+	g_assert_cmpstr (PPS_FORM_FIELD_TEXT (other_text)->text, ==, "initial");
+	g_assert_cmpuint (_pps_document_objects_get_id (_pps_document_proxy_get_objects (document), G_OBJECT (other_text)), ==,
+	                  _pps_document_objects_get_id (_pps_document_proxy_get_objects (document), G_OBJECT (text)));
 	g_assert_true (text->changed);
 	g_assert_cmpstr (PPS_FORM_FIELD_TEXT (text)->text, ==, "Pending overlay edit");
 	pps_mapping_list_unref (again);
@@ -550,6 +555,11 @@ forms_edit_and_save (void)
 	g_autoptr (PpsLinkAction) all = pps_link_action_new_reset_form (NULL, FALSE);
 	pps_document_forms_reset_form (forms, all);
 	assert_form_text (forms, text, "default");
+	again = pps_document_forms_get_form_fields (forms, page);
+	g_assert_cmpstr (PPS_FORM_FIELD_TEXT (find_field (again, "Text"))->text, ==, "default");
+	g_assert_false (find_field (again, "Text")->changed);
+	g_assert_false (PPS_FORM_FIELD_BUTTON (find_field (again, "Check"))->state);
+	pps_mapping_list_unref (again);
 	pps_mapping_list_unref (mappings);
 	g_assert_cmpint (g_unlink (saved_path), ==, 0);
 	g_assert_cmpint (g_unlink (path), ==, 0);

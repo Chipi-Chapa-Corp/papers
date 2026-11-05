@@ -74,7 +74,7 @@ roundtrip (void)
 static void
 reject_buffer (GVariant *buffer, GUnixFDList *fd_list)
 {
-	g_autoptr (GVariant) owned = g_variant_ref_sink (buffer);
+	g_autoptr (GVariant) owned = g_variant_take_ref (buffer);
 	g_autoptr (GError) error = NULL;
 	cairo_surface_t *surface = _pps_document_surface_from_buffer (owned, fd_list, &error);
 

@@ -203,7 +203,6 @@ mod imp {
             self.set_page_label(annot);
             self.set_author_label(annot);
             self.set_content_label(annot);
-            self.set_reference_label(annot);
             self.set_color(annot);
 
             if let Some(annot) = annot {
@@ -268,6 +267,17 @@ mod imp {
             self.image.set_visible(icon_name.is_some());
 
             self.annotation.replace(annot.cloned());
+            self.reference_label.set_visible(false);
+            // Text extraction can dispatch events while waiting for the document
+            // worker. Do it after GTK has finished binding this list item.
+            glib::idle_add_local_once(glib::clone!(
+                #[weak(rename_to = obj)]
+                self,
+                move || {
+                    let annot = obj.annotation.borrow().clone();
+                    obj.set_reference_label(annot.as_ref());
+                }
+            ));
         }
     }
 }

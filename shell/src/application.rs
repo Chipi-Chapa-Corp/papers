@@ -50,8 +50,8 @@ mod imp {
         }
 
         fn shutdown(&self) {
-            papers_document::shutdown();
             Job::scheduler_wait();
+            papers_document::shutdown();
             self.parent_shutdown();
         }
 

@@ -6,6 +6,7 @@
 
 #include "pps-document-objects-private.h"
 #include "pps-document-session-private.h"
+#include "pps-document-state-private.h"
 
 typedef struct {
 	PpsDocument *document;
@@ -24,5 +25,6 @@ void pps_document_worker_bind_selection (Worker *worker, PpsDBusDocument *interf
 void pps_document_worker_bind_links (Worker *worker, PpsDBusDocument *interface);
 void pps_document_worker_clear_links (Worker *worker);
 gboolean pps_document_worker_check_document (Worker *worker, GType capability, GDBusMethodInvocation *invocation);
+guint pps_document_worker_get_state (Worker *worker);
 PpsRenderContext *pps_document_worker_create_render_context (
     Worker *worker, int page, GType capability, int rotation, double scale, int target_width, int target_height, guint annotations, GDBusMethodInvocation *invocation);

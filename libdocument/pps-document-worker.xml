@@ -33,6 +33,7 @@
     </method>
     <method name="Save">
       <arg name="uri" type="s" direction="in"/>
+      <arg name="document_state" type="u" direction="out"/>
     </method>
     <method name="GetOutlines">
       <arg name="present" type="b" direction="out"/>

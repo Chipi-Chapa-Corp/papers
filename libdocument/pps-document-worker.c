@@ -180,6 +180,19 @@ get_page_info (PpsDBusDocument *interface,
 	return TRUE;
 }
 
+guint
+pps_document_worker_get_state (Worker *worker)
+{
+	guint state = pps_document_get_modified (worker->document) ? PPS_DOCUMENT_STATE_MODIFIED : 0;
+	if (PPS_IS_DOCUMENT_FORMS (worker->document) &&
+	    pps_document_forms_document_is_modified (PPS_DOCUMENT_FORMS (worker->document)))
+		state |= PPS_DOCUMENT_STATE_FORMS_MODIFIED;
+	if (PPS_IS_DOCUMENT_ANNOTATIONS (worker->document) &&
+	    pps_document_annotations_document_is_modified (PPS_DOCUMENT_ANNOTATIONS (worker->document)))
+		state |= PPS_DOCUMENT_STATE_ANNOTATIONS_MODIFIED;
+	return state;
+}
+
 static gboolean
 get_info (PpsDBusDocument *interface,
           GDBusMethodInvocation *invocation,
@@ -210,6 +223,7 @@ get_info (PpsDBusDocument *interface,
 	pps_document_get_backend_info (worker->document, &backend);
 	metadata = g_variant_ref_sink (_pps_document_info_to_variant (info));
 	g_variant_dict_init (&properties, metadata);
+	g_variant_dict_insert (&properties, "document-state", "u", pps_document_worker_get_state (worker));
 	if (PPS_IS_DOCUMENT_FIND (worker->document))
 		g_variant_dict_insert (&properties, "find-options", "u",
 		                       pps_document_find_get_supported_options (PPS_DOCUMENT_FIND (worker->document)));
@@ -248,7 +262,7 @@ save_document (PpsDBusDocument *interface,
 	} else if (!pps_document_save (worker->document, uri, &error)) {
 		g_dbus_method_invocation_return_gerror (invocation, error);
 	} else {
-		pps_dbus_document_complete_save (interface, invocation);
+		pps_dbus_document_complete_save (interface, invocation, pps_document_worker_get_state (worker));
 	}
 	return TRUE;
 }

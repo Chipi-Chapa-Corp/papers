@@ -19,6 +19,7 @@ typedef struct {
 	char *password;
 	int n_pages;
 	gboolean has_security;
+	guint state;
 	gulong closed_handler;
 } PpsDocumentProxyPrivate;
 
@@ -50,6 +51,19 @@ _pps_document_proxy_get_objects (PpsDocument *document)
 	return get_private (document)->objects;
 }
 
+guint
+_pps_document_proxy_get_state (PpsDocument *document)
+{
+	return get_private (document)->state;
+}
+
+void
+_pps_document_proxy_set_state (PpsDocument *document, guint state)
+{
+	get_private (document)->state = state;
+	pps_document_set_modified (document, (state & PPS_DOCUMENT_STATE_MODIFIED) != 0);
+}
+
 static gboolean
 read_info (PpsDocument *document, int n_pages, GError **error)
 {
@@ -60,6 +74,7 @@ read_info (PpsDocument *document, int n_pages, GError **error)
 	g_autofree char *backend_name = NULL;
 	g_autofree char *backend_version = NULL;
 	gboolean has_security;
+	guint state;
 
 	if (!pps_dbus_document_call_get_info_sync (
 		priv->session->proxy, G_DBUS_CALL_FLAGS_NONE, -1,
@@ -69,6 +84,11 @@ read_info (PpsDocument *document, int n_pages, GError **error)
 	info = _pps_document_info_from_variant (metadata, error);
 	if (!info)
 		return FALSE;
+	if (!g_variant_lookup (metadata, "document-state", "u", &state) ||
+	    (state & ~(PPS_DOCUMENT_STATE_MODIFIED | PPS_DOCUMENT_STATE_FORMS_MODIFIED | PPS_DOCUMENT_STATE_ANNOTATIONS_MODIFIED))) {
+		g_set_error_literal (error, G_IO_ERROR, G_IO_ERROR_INVALID_DATA, "Invalid document modification state");
+		return FALSE;
+	}
 	if (n_pages < 0 || g_variant_n_children (pages) != (gsize) n_pages) {
 		g_set_error_literal (error, G_IO_ERROR, G_IO_ERROR_INVALID_DATA,
 		                     "Invalid document page count");
@@ -91,6 +111,7 @@ read_info (PpsDocument *document, int n_pages, GError **error)
 	priv->has_security = has_security;
 	priv->metadata = g_steal_pointer (&metadata);
 	priv->n_pages = n_pages;
+	_pps_document_proxy_set_state (document, state);
 	return TRUE;
 }
 
@@ -128,10 +149,11 @@ static gboolean
 save (PpsDocument *document, const char *uri, GError **error)
 {
 	PpsDocumentProxyPrivate *priv = get_private (document);
+	guint state;
 	if (!pps_dbus_document_call_save_sync (priv->session->proxy, uri,
-	                                       G_DBUS_CALL_FLAGS_NONE, -1, NULL, error))
+	                                       G_DBUS_CALL_FLAGS_NONE, -1, &state, NULL, error))
 		return FALSE;
-	pps_document_set_modified (document, FALSE);
+	_pps_document_proxy_set_state (document, state);
 	return TRUE;
 }
 

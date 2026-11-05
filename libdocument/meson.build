@@ -181,6 +181,7 @@ libppsdocument = shared_library(
     'pps-document-proxy-images.c',
     'pps-document-proxy-transition.c',
     'pps-document-proxy-media.c',
+    'pps-document-proxy-export.c',
     'pps-document-geometry.c',
     'pps-document-objects.c',
     'pps-document-variant.c',

@@ -17,6 +17,7 @@
 #include "pps-document-text.h"
 #include "pps-document-transition.h"
 #include "pps-document.h"
+#include "pps-file-exporter.h"
 #include "pps-selection.h"
 
 #define PPS_TYPE_DOCUMENT_PROXY (pps_document_proxy_get_type ())
@@ -57,3 +58,4 @@ void _pps_document_proxy_fonts_iface_init (PpsDocumentFontsInterface *iface);
 void _pps_document_proxy_images_iface_init (PpsDocumentImagesInterface *iface);
 void _pps_document_proxy_transition_iface_init (PpsDocumentTransitionInterface *iface);
 void _pps_document_proxy_media_iface_init (PpsDocumentMediaInterface *iface);
+void _pps_document_proxy_exporter_iface_init (PpsFileExporterInterface *iface);

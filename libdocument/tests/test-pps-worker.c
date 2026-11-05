@@ -147,6 +147,10 @@ reject_invalid_requests (void)
 	    session->proxy, 1, G_DBUS_CALL_FLAGS_NONE, 5000, NULL, NULL, NULL, &error));
 	g_assert_error (error, G_IO_ERROR, G_IO_ERROR_NOT_INITIALIZED);
 	g_clear_error (&error);
+	g_assert_false (pps_dbus_document_call_remove_annotation_sync (
+	    session->proxy, 1, G_DBUS_CALL_FLAGS_NONE, 5000, NULL, NULL, &error));
+	g_assert_error (error, G_IO_ERROR, G_IO_ERROR_NOT_INITIALIZED);
+	g_clear_error (&error);
 	g_assert_false (pps_dbus_document_call_get_attachments_sync (
 	    session->proxy, 0, G_DBUS_CALL_FLAGS_NONE, 5000, NULL, NULL, NULL, NULL, NULL, &error));
 	g_assert_error (error, G_IO_ERROR, G_IO_ERROR_NOT_INITIALIZED);

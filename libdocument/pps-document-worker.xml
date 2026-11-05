@@ -46,6 +46,43 @@
       <arg name="more" type="b" direction="out"/>
       <arg name="attachments" type="aa{sv}" direction="out"/>
     </method>
+    <method name="ListAnnotations">
+      <arg name="page" type="i" direction="in"/>
+      <arg name="annotations" type="at" direction="out"/>
+    </method>
+    <method name="GetAnnotations">
+      <annotation name="org.gtk.GDBus.C.UnixFD" value="true"/>
+      <arg name="page" type="i" direction="in"/>
+      <arg name="handles" type="at" direction="in"/>
+      <arg name="annotations" type="a(ta{sv})" direction="out"/>
+    </method>
+    <method name="SetAnnotationProperty">
+      <annotation name="org.gtk.GDBus.C.UnixFD" value="true"/>
+      <arg name="annotation" type="t" direction="in"/>
+      <arg name="name" type="s" direction="in"/>
+      <arg name="value" type="v" direction="in"/>
+      <arg name="document_state" type="u" direction="out"/>
+    </method>
+    <method name="AddAnnotation">
+      <annotation name="org.gtk.GDBus.C.UnixFD" value="true"/>
+      <arg name="annotation" type="t" direction="in"/>
+      <arg name="value" type="a{sv}" direction="in"/>
+      <arg name="handle" type="t" direction="out"/>
+      <arg name="name_present" type="b" direction="out"/>
+      <arg name="name" type="s" direction="out"/>
+      <arg name="area" type="(dddd)" direction="out"/>
+      <arg name="document_state" type="u" direction="out"/>
+    </method>
+    <method name="RemoveAnnotation">
+      <arg name="annotation" type="t" direction="in"/>
+      <arg name="document_state" type="u" direction="out"/>
+    </method>
+    <method name="OverAnnotationMarkup">
+      <arg name="annotation" type="t" direction="in"/>
+      <arg name="x" type="d" direction="in"/>
+      <arg name="y" type="d" direction="in"/>
+      <arg name="result" type="u" direction="out"/>
+    </method>
     <method name="GetLinks">
       <arg name="page" type="i" direction="in"/>
       <arg name="present" type="b" direction="out"/>

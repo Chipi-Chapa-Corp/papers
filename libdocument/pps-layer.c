@@ -120,6 +120,7 @@ pps_layer_set_property (GObject *object,
 		priv->title_only = g_value_get_boolean (value);
 		break;
 	case PROP_TITLE:
+		g_free (priv->title);
 		priv->title = g_value_dup_string (value);
 		break;
 	default:
@@ -135,6 +136,7 @@ pps_layer_dispose (GObject *object)
 	PpsLayerPrivate *priv = GET_PRIVATE (layer);
 
 	g_clear_object (&priv->children);
+	g_clear_pointer (&priv->title, g_free);
 
 	G_OBJECT_CLASS (pps_layer_parent_class)->dispose (object);
 }

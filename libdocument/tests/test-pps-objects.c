@@ -59,6 +59,19 @@ concurrent_identity (void)
 }
 
 static void
+layer_title_lifetime (void)
+{
+	g_autoptr (PpsLayer) layer = pps_layer_new (0);
+	g_object_set (layer, "title", "original", NULL);
+	g_object_set (layer, "title", "replacement", NULL);
+	g_autofree char *title = NULL;
+	g_object_get (layer, "title", &title, NULL);
+	g_assert_cmpstr (title, ==, "replacement");
+	g_object_run_dispose (G_OBJECT (layer));
+	g_object_run_dispose (G_OBJECT (layer));
+}
+
+static void
 owned_lifetime (void)
 {
 	PpsDocumentObjects *objects = _pps_document_objects_new ();
@@ -83,5 +96,6 @@ main (int argc, char **argv)
 	g_test_add_func ("/document-objects/identity-and-scope", identity_and_scope);
 	g_test_add_func ("/document-objects/owned-lifetime", owned_lifetime);
 	g_test_add_func ("/document-objects/concurrent-identity", concurrent_identity);
+	g_test_add_func ("/document-objects/layer-title-lifetime", layer_title_lifetime);
 	return g_test_run ();
 }

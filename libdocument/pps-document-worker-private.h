@@ -15,6 +15,7 @@ typedef struct {
 	GListModel *outlines;
 	GListModel *layers;
 	GHashTable *links;
+	GHashTable *forms;
 	gboolean outlines_loaded;
 	gboolean layers_loaded;
 } Worker;
@@ -23,6 +24,7 @@ gboolean pps_document_worker_check_page (Worker *worker, int page, GType capabil
 void pps_document_worker_bind_text (Worker *worker, PpsDBusDocument *interface);
 void pps_document_worker_bind_selection (Worker *worker, PpsDBusDocument *interface);
 void pps_document_worker_bind_links (Worker *worker, PpsDBusDocument *interface);
+void pps_document_worker_bind_forms (Worker *worker, PpsDBusDocument *interface);
 void pps_document_worker_clear_links (Worker *worker);
 gboolean pps_document_worker_check_document (Worker *worker, GType capability, GDBusMethodInvocation *invocation);
 guint pps_document_worker_get_state (Worker *worker);

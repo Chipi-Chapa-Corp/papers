@@ -380,6 +380,7 @@ main (int argc, char **argv)
 	pps_document_worker_bind_text (&worker, interface);
 	pps_document_worker_bind_selection (&worker, interface);
 	pps_document_worker_bind_links (&worker, interface);
+	pps_document_worker_bind_forms (&worker, interface);
 	if (!g_dbus_interface_skeleton_export (G_DBUS_INTERFACE_SKELETON (interface),
 	                                       connection, PPS_DOCUMENT_WORKER_PATH, &error)) {
 		pps_shutdown ();
@@ -390,6 +391,7 @@ main (int argc, char **argv)
 	g_main_loop_run (loop);
 	g_dbus_interface_skeleton_unexport (G_DBUS_INTERFACE_SKELETON (interface));
 	pps_document_worker_clear_links (&worker);
+	g_clear_pointer (&worker.forms, g_hash_table_unref);
 	g_clear_object (&worker.document);
 	pps_shutdown ();
 	return 0;

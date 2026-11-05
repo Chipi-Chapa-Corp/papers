@@ -69,6 +69,61 @@
       <arg name="present" type="b" direction="out"/>
       <arg name="text" type="s" direction="out"/>
     </method>
+    <method name="GetFormFields">
+      <arg name="page" type="i" direction="in"/>
+      <arg name="present" type="b" direction="out"/>
+      <arg name="mappings" type="a((dddd)a{sv})" direction="out"/>
+    </method>
+    <method name="GetFormText">
+      <arg name="field" type="t" direction="in"/>
+      <arg name="present" type="b" direction="out"/>
+      <arg name="text" type="s" direction="out"/>
+    </method>
+    <method name="SetFormText">
+      <arg name="field" type="t" direction="in"/>
+      <arg name="present" type="b" direction="in"/>
+      <arg name="text" type="s" direction="in"/>
+      <arg name="document_state" type="u" direction="out"/>
+    </method>
+    <method name="GetFormButtonState">
+      <arg name="field" type="t" direction="in"/>
+      <arg name="state" type="b" direction="out"/>
+    </method>
+    <method name="SetFormButtonState">
+      <arg name="field" type="t" direction="in"/>
+      <arg name="state" type="b" direction="in"/>
+      <arg name="document_state" type="u" direction="out"/>
+    </method>
+    <method name="GetFormChoiceCount">
+      <arg name="field" type="t" direction="in"/>
+      <arg name="count" type="i" direction="out"/>
+    </method>
+    <method name="GetFormChoiceItem">
+      <arg name="field" type="t" direction="in"/>
+      <arg name="index" type="i" direction="in"/>
+      <arg name="present" type="b" direction="out"/>
+      <arg name="text" type="s" direction="out"/>
+    </method>
+    <method name="GetFormChoiceSelected">
+      <arg name="field" type="t" direction="in"/>
+      <arg name="index" type="i" direction="in"/>
+      <arg name="selected" type="b" direction="out"/>
+    </method>
+    <method name="SelectFormChoice">
+      <arg name="field" type="t" direction="in"/>
+      <arg name="index" type="i" direction="in"/>
+      <arg name="toggle" type="b" direction="in"/>
+      <arg name="document_state" type="u" direction="out"/>
+    </method>
+    <method name="UnselectFormChoice">
+      <arg name="field" type="t" direction="in"/>
+      <arg name="document_state" type="u" direction="out"/>
+    </method>
+    <method name="ResetForm">
+      <arg name="fields" type="as" direction="in"/>
+      <arg name="exclude" type="b" direction="in"/>
+      <arg name="document_state" type="u" direction="out"/>
+    </method>
     <method name="GetTextLayout">
       <arg name="page" type="i" direction="in"/>
       <arg name="present" type="b" direction="out"/>

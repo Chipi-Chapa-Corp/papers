@@ -55,6 +55,23 @@ fn closing_reports_the_result_without_destroying_the_container() {
             .add_annotation(&annotation);
         assert!(view.modified());
 
+        let dirty_copy = PpsDocumentView::new();
+        let dirty_window = adw::Window::builder().content(&dirty_copy).build();
+        dirty_copy.open_copy_from(&view, None);
+        assert!(dirty_copy.modified());
+        let (saved, stream) = gio::File::new_tmp(Some("papers-dirty-copy-XXXXXX.pdf")).unwrap();
+        stream.close(gio::Cancellable::NONE).unwrap();
+        document.save(&saved.uri()).unwrap();
+        assert!(!view.modified());
+        assert!(!dirty_copy.modified());
+        saved.delete(gio::Cancellable::NONE).unwrap();
+        dirty_window.destroy();
+        document
+            .dynamic_cast_ref::<DocumentAnnotations>()
+            .unwrap()
+            .add_annotation(&AnnotationText::new(&document.page(0).unwrap()));
+        assert!(view.modified());
+
         view.request_close();
         let dialog = window.visible_dialog().unwrap();
         view.request_close();

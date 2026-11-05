@@ -96,27 +96,13 @@ impl imp::PpsDocumentView {
     }
 
     pub(super) fn document_modified(&self) {
-        if self.modified.get() {
-            return;
+        let modified = self
+            .document()
+            .is_some_and(|document| document.is_modified());
+        if self.modified.replace(modified) != modified {
+            self.obj().notify_modified();
+            self.update_title();
         }
-
-        self.modified.set(true);
-        self.obj().notify_modified();
-
-        let window_title = self
-            .header_bar
-            .title_widget()
-            .and_downcast::<adw::WindowTitle>()
-            .unwrap();
-        let title = window_title.title();
-
-        let new_title = if self.obj().direction() == gtk::TextDirection::Rtl {
-            format!("{title} •")
-        } else {
-            format!("• {title}")
-        };
-
-        window_title.set_title(&new_title);
     }
 
     pub(super) fn set_document_metadata(&self) {
@@ -204,6 +190,14 @@ impl imp::PpsDocumentView {
             gettext("Papers")
         };
 
+        if self.modified.get() {
+            let title = title_widget.title();
+            title_widget.set_title(&if ltr {
+                format!("• {title}")
+            } else {
+                format!("{title} •")
+            });
+        }
         if self.title.replace(title.clone()) != title {
             self.obj().notify_title();
         }
@@ -245,7 +239,15 @@ impl imp::PpsDocumentView {
             return;
         }
 
+        if let Some(previous) = self.model.document()
+            && let Some(id) = self.modified_handler_id.take()
+        {
+            previous.disconnect(id);
+        }
+
         self.model.set_document(document);
+
+        self.document_modified();
 
         self.set_message_area(None);
 
@@ -289,10 +291,6 @@ impl imp::PpsDocumentView {
         }
 
         self.set_default_actions();
-
-        if self.modified.replace(false) {
-            self.obj().notify_modified();
-        }
 
         let id = document.connect_modified_notify(glib::clone!(
             #[weak(rename_to = obj)]

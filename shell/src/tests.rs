@@ -6,6 +6,7 @@ pub fn run(test: impl FnOnce() + Send + std::panic::UnwindSafe + 'static) {
     gtk::test_synced(move || {
         thread_local! {
             static APPLICATION: PpsApplication = {
+                glib::set_prgname(Some("papers-tests"));
                 let app = PpsApplication::new();
                 app.register(gio::Cancellable::NONE).unwrap();
                 app

@@ -28,6 +28,9 @@ roundtrip (void)
 	g_assert_cmpfloat (decoded->page_sizes[1].width, ==, sizes[1].width);
 	g_autoptr (GVariant) encoded = g_variant_ref_sink (_pps_document_info_to_variant (decoded));
 	g_assert_true (g_variant_equal (value, encoded));
+	g_autoptr (PpsDocumentInfo) copy = pps_document_info_copy (decoded);
+	g_autoptr (GVariant) encoded_copy = g_variant_ref_sink (_pps_document_info_to_variant (copy));
+	g_assert_true (g_variant_equal (value, encoded_copy));
 }
 
 static void
@@ -45,6 +48,9 @@ empty_info (void)
 	g_assert_null (decoded->creation_datetime);
 	g_assert_null (decoded->page_sizes);
 	g_assert_cmpuint (decoded->fields_mask, ==, 0);
+	g_autoptr (PpsDocumentInfo) copy = pps_document_info_copy (decoded);
+	g_assert_null (copy->creation_datetime);
+	g_assert_null (copy->modified_datetime);
 }
 
 static void

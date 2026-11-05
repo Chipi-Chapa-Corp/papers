@@ -58,8 +58,10 @@ pps_document_info_copy (const PpsDocumentInfo *info)
 	copy->producer = g_strdup (info->producer);
 	copy->linearized = g_strdup (info->linearized);
 
-	copy->creation_datetime = g_date_time_ref (info->creation_datetime);
-	copy->modified_datetime = g_date_time_ref (info->modified_datetime);
+	if (info->creation_datetime)
+		copy->creation_datetime = g_date_time_ref (info->creation_datetime);
+	if (info->modified_datetime)
+		copy->modified_datetime = g_date_time_ref (info->modified_datetime);
 
 	copy->layout = info->layout;
 	copy->mode = info->mode;
@@ -68,6 +70,7 @@ pps_document_info_copy (const PpsDocumentInfo *info)
 	copy->n_pages = info->n_pages;
 	copy->page_sizes = g_memdup2 (info->page_sizes, sizeof (PpsDocumentPageSize) * info->n_pages);
 	copy->license = pps_document_license_copy (info->license);
+	copy->contains_js = info->contains_js;
 
 	copy->fields_mask = info->fields_mask;
 

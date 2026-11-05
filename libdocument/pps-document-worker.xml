@@ -9,6 +9,7 @@
       <arg name="title" type="s" direction="in"/>
       <arg name="current_page" type="i" direction="in"/>
       <arg name="embed_page_setup" type="b" direction="in"/>
+      <arg name="parent_handle" type="s" direction="in"/>
       <arg name="result" type="i" direction="out"/>
       <arg name="settings" type="a{sv}" direction="out"/>
       <arg name="page_setup" type="a{sv}" direction="out"/>

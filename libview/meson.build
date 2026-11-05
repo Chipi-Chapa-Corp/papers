@@ -121,6 +121,10 @@ libview_deps = [
   m_dep,
 ]
 
+if gtk_dep.get_variable(pkgconfig: 'targets', default_value: '').split().contains('x11')
+  libview_deps += dependency('x11')
+endif
+
 cflags = [
   '-DG_LOG_DOMAIN="PapersView"',
   '-DPAPERS_COMPILATION'

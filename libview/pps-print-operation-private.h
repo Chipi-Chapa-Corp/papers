@@ -6,4 +6,4 @@
 
 /* Keep rendering on the worker's dispatch context, serial with other requests. */
 PPS_PRIVATE
-PpsPrintOperation *_pps_print_operation_new_for_worker (PpsDocument *document);
+PpsPrintOperation *_pps_print_operation_new_for_worker (PpsDocument *document, const char *parent_handle);

@@ -14,9 +14,18 @@
 
 #include <glib/gi18n.h>
 #include <glib/gstdio.h>
+#include <math.h>
 #include <unistd.h>
 
 #include <adwaita.h>
+
+#ifdef GDK_WINDOWING_X11
+#include <X11/Xutil.h>
+#include <gdk/x11/gdkx.h>
+#endif
+#ifdef GDK_WINDOWING_WAYLAND
+#include <gdk/wayland/gdkwayland.h>
+#endif
 
 #include "pps-file-exporter-private.h"
 #include "pps-job-scheduler.h"
@@ -1520,6 +1529,10 @@ struct _PpsPrintOperationPrint {
 	GtkWidget *borders_button;
 	gboolean draw_borders;
 	gboolean run_in_main_context;
+	char *parent_handle;
+	GWeakRef dialog;
+	GDBusConnection *portal_bus;
+	guint portal_filter;
 };
 
 struct _PpsPrintOperationPrintClass {
@@ -1617,6 +1630,11 @@ static void
 pps_print_operation_print_cancel (PpsPrintOperation *op)
 {
 	PpsPrintOperationPrint *print = PPS_PRINT_OPERATION_PRINT (op);
+	g_autoptr (GtkWindow) dialog = g_weak_ref_get (&print->dialog);
+	if (dialog && gtk_widget_get_visible (GTK_WIDGET (dialog))) {
+		g_signal_emit_by_name (dialog, "response", GTK_RESPONSE_CANCEL);
+		return;
+	}
 
 	if (print->job_print)
 		pps_job_cancel (print->job_print);
@@ -1881,6 +1899,72 @@ pps_print_operation_print_draw_page (PpsPrintOperationPrint *print,
 		pps_job_scheduler_push_job (print->job_print, PPS_JOB_PRIORITY_NONE);
 }
 
+G_GNUC_BEGIN_IGNORE_DEPRECATIONS
+static void
+import_print_parent (GtkWidget *window, PpsPrintOperationPrint *print)
+{
+	GdkSurface *surface = gtk_native_get_surface (GTK_NATIVE (window));
+	if (!surface || !print->parent_handle)
+		return;
+#ifdef GDK_WINDOWING_X11
+	if (GDK_IS_X11_SURFACE (surface) && g_str_has_prefix (print->parent_handle, "x11:")) {
+		char *end;
+		guint64 xid = g_ascii_strtoull (print->parent_handle + 4, &end, 16);
+		if (!*end && xid && xid <= G_MAXULONG)
+			XSetTransientForHint (GDK_SURFACE_XDISPLAY (surface), GDK_SURFACE_XID (surface), xid);
+	}
+#endif
+#ifdef GDK_WINDOWING_WAYLAND
+	if (GDK_IS_WAYLAND_TOPLEVEL (surface) && g_str_has_prefix (print->parent_handle, "wayland:"))
+		gdk_wayland_toplevel_set_transient_for_exported (GDK_TOPLEVEL (surface), print->parent_handle + 8);
+#endif
+}
+G_GNUC_END_IGNORE_DEPRECATIONS
+
+static void
+print_dialog_root_changed (GtkWidget *widget, GParamSpec *spec, PpsPrintOperationPrint *print)
+{
+	GtkRoot *root = gtk_widget_get_root (widget);
+	if (!GTK_IS_WINDOW (root) || !g_signal_lookup ("response", G_OBJECT_TYPE (root)))
+		return;
+	g_weak_ref_set (&print->dialog, root);
+	if (gtk_widget_get_realized (GTK_WIDGET (root)))
+		import_print_parent (GTK_WIDGET (root), print);
+	else
+		g_signal_connect_object (root, "realize", G_CALLBACK (import_print_parent), print, 0);
+}
+
+/* GTK's portal request originates in the worker. Preserve the UI window's
+ * exported parent while leaving the portal's settings, token and FDs intact. */
+static GDBusMessage *
+portal_print_parent (GDBusConnection *connection, GDBusMessage *message, gboolean incoming, gpointer data)
+{
+	if (incoming || g_strcmp0 (g_dbus_message_get_interface (message), "org.freedesktop.portal.Print") ||
+	    g_strcmp0 (g_dbus_message_get_path (message), "/org/freedesktop/portal/desktop") ||
+	    (g_strcmp0 (g_dbus_message_get_member (message), "Print") &&
+	     g_strcmp0 (g_dbus_message_get_member (message), "PreparePrint")))
+		return message;
+	GVariant *body = g_dbus_message_get_body (message);
+	if (!body || !g_variant_n_children (body))
+		return message;
+	g_autoptr (GVariant) first = g_variant_get_child_value (body, 0);
+	if (!g_variant_is_of_type (first, G_VARIANT_TYPE_STRING))
+		return message;
+	GDBusMessage *copy = g_dbus_message_copy (message, NULL);
+	if (!copy)
+		return message;
+	GVariantBuilder builder;
+	g_variant_builder_init (&builder, G_VARIANT_TYPE_TUPLE);
+	g_variant_builder_add (&builder, "s", (const char *) data);
+	for (gsize i = 1; i < g_variant_n_children (body); i++) {
+		g_autoptr (GVariant) value = g_variant_get_child_value (body, i);
+		g_variant_builder_add_value (&builder, value);
+	}
+	g_dbus_message_set_body (copy, g_variant_builder_end (&builder));
+	g_object_unref (message);
+	return copy;
+}
+
 static GObject *
 pps_print_operation_print_create_custom_widget (PpsPrintOperationPrint *print,
                                                 GtkPrintContext *context)
@@ -1900,6 +1984,7 @@ pps_print_operation_print_create_custom_widget (PpsPrintOperationPrint *print,
 	draw_borders = gtk_print_settings_has_key (settings, PPS_PRINT_SETTING_DRAW_BORDERS) ? gtk_print_settings_get_bool (settings, PPS_PRINT_SETTING_DRAW_BORDERS) : FALSE;
 
 	grid = gtk_grid_new ();
+	g_signal_connect_object (grid, "notify::root", G_CALLBACK (print_dialog_root_changed), print, 0);
 	gtk_grid_set_row_spacing (GTK_GRID (grid), 6);
 	gtk_grid_set_column_spacing (GTK_GRID (grid), 12);
 	gtk_widget_set_margin_top (grid, 12);
@@ -1993,6 +2078,11 @@ pps_print_operation_print_finalize (GObject *object)
 
 	g_clear_object (&print->op);
 	g_clear_pointer (&print->job_name, g_free);
+	g_clear_pointer (&print->parent_handle, g_free);
+	g_weak_ref_clear (&print->dialog);
+	if (print->portal_filter)
+		g_dbus_connection_remove_filter (print->portal_bus, print->portal_filter);
+	g_clear_object (&print->portal_bus);
 
 	if (print->job_print) {
 		if (!pps_job_is_finished (print->job_print))
@@ -2019,6 +2109,7 @@ pps_print_operation_print_init (PpsPrintOperationPrint *print)
 	GApplication *application;
 
 	print->op = gtk_print_operation_new ();
+	g_weak_ref_init (&print->dialog, NULL);
 	g_signal_connect_swapped (print->op, "begin_print",
 	                          G_CALLBACK (pps_print_operation_print_begin_print),
 	                          print);
@@ -2077,10 +2168,17 @@ pps_print_operation_print_class_init (PpsPrintOperationPrintClass *klass)
 
 /* Native printing stays in the process that owns the backend. */
 PpsPrintOperation *
-_pps_print_operation_new_for_worker (PpsDocument *document)
+_pps_print_operation_new_for_worker (PpsDocument *document, const char *parent_handle)
 {
 	PpsPrintOperation *op = g_object_new (PPS_TYPE_PRINT_OPERATION_PRINT, "document", document, NULL);
-	PPS_PRINT_OPERATION_PRINT (op)->run_in_main_context = TRUE;
+	PpsPrintOperationPrint *print = PPS_PRINT_OPERATION_PRINT (op);
+	print->run_in_main_context = TRUE;
+	print->parent_handle = g_strdup (parent_handle);
+	if (parent_handle && *parent_handle) {
+		print->portal_bus = g_bus_get_sync (G_BUS_TYPE_SESSION, NULL, NULL);
+		if (print->portal_bus)
+			print->portal_filter = g_dbus_connection_add_filter (print->portal_bus, portal_print_parent, g_strdup (parent_handle), g_free);
+	}
 	return op;
 }
 
@@ -2089,6 +2187,10 @@ typedef struct {
 	GError *error;
 	guint subscription;
 	gboolean running;
+	GWeakRef parent_window;
+	gulong parent_handler;
+	GdkSurface *parent_surface;
+	char *parent_handle;
 } PpsPrintOperationRemote;
 
 typedef PpsPrintOperationPrintClass PpsPrintOperationRemoteClass;
@@ -2097,14 +2199,51 @@ static GType pps_print_operation_remote_get_type (void);
 G_DEFINE_TYPE (PpsPrintOperationRemote, pps_print_operation_remote, PPS_TYPE_PRINT_OPERATION_PRINT)
 
 static void
+remote_clear_parent (PpsPrintOperationRemote *remote)
+{
+	g_autoptr (GtkWindow) parent = g_weak_ref_get (&remote->parent_window);
+	if (parent && remote->parent_handler)
+		g_signal_handler_disconnect (parent, remote->parent_handler);
+	remote->parent_handler = 0;
+	g_weak_ref_set (&remote->parent_window, NULL);
+#ifdef GDK_WINDOWING_WAYLAND
+	if (remote->parent_surface && !gdk_surface_is_destroyed (remote->parent_surface) &&
+	    remote->parent_handle && g_str_has_prefix (remote->parent_handle, "wayland:"))
+		gdk_wayland_toplevel_drop_exported_handle (GDK_TOPLEVEL (remote->parent_surface), remote->parent_handle + 8);
+#endif
+	g_clear_object (&remote->parent_surface);
+	g_clear_pointer (&remote->parent_handle, g_free);
+}
+
+static void
+remote_print_finish (PpsPrintOperation *op, GtkPrintOperationResult result)
+{
+	PpsPrintOperationRemote *remote = (PpsPrintOperationRemote *) op;
+	if (!remote->running)
+		return;
+	g_object_ref (op);
+	remote->running = FALSE;
+	if (remote->subscription)
+		g_dbus_connection_signal_unsubscribe (_pps_document_proxy_get_session (op->document)->connection, remote->subscription);
+	remote->subscription = 0;
+	remote_clear_parent (remote);
+	g_signal_emit (op, signals[DONE], 0, result);
+	g_object_unref (op);
+}
+
+static void
 remote_print_signal (GDBusConnection *connection, const char *sender, const char *path, const char *interface, const char *signal, GVariant *parameters, gpointer data)
 {
 	PpsPrintOperation *op = data;
-	if (g_str_equal (signal, "PrintBegun")) {
+	if (g_str_equal (signal, "PrintBegun") && g_variant_is_of_type (parameters, G_VARIANT_TYPE_UNIT)) {
 		g_signal_emit (op, signals[BEGIN_PRINT], 0);
-	} else if (g_str_equal (signal, "PrintProgress")) {
+	} else if (g_str_equal (signal, "PrintProgress") && g_variant_is_of_type (parameters, G_VARIANT_TYPE ("(sd)"))) {
 		const char *status;
-		g_variant_get (parameters, "(&sd)", &status, &op->progress);
+		double progress;
+		g_variant_get (parameters, "(&sd)", &status, &progress);
+		if (!isfinite (progress) || progress < 0 || progress > 1)
+			return;
+		op->progress = progress;
 		g_free (op->status);
 		op->status = g_strdup (status);
 		g_signal_emit (op, signals[STATUS_CHANGED], 0);
@@ -2116,7 +2255,6 @@ remote_print_done (GObject *source, GAsyncResult *result, gpointer data)
 {
 	PpsPrintOperation *op = data;
 	PpsPrintOperationRemote *remote = (PpsPrintOperationRemote *) op;
-	PpsDocumentSession *session = _pps_document_proxy_get_session (op->document);
 	g_autoptr (GVariant) settings_data = NULL;
 	g_autoptr (GVariant) setup_data = NULL;
 	int response = GTK_PRINT_OPERATION_RESULT_ERROR;
@@ -2124,7 +2262,7 @@ remote_print_done (GObject *source, GAsyncResult *result, gpointer data)
 	                                         &settings_data, &setup_data, result, &remote->error)) {
 		g_autoptr (GtkPrintSettings) settings = gtk_print_settings_new_from_gvariant (settings_data);
 		g_autoptr (GtkPageSetup) setup = gtk_page_setup_new_from_gvariant (setup_data);
-		if (settings && setup) {
+		if (settings && setup && (response == GTK_PRINT_OPERATION_RESULT_APPLY || response == GTK_PRINT_OPERATION_RESULT_CANCEL || response == GTK_PRINT_OPERATION_RESULT_ERROR)) {
 			pps_print_operation_set_print_settings (op, settings);
 			pps_print_operation_set_default_page_setup (op, setup);
 		} else {
@@ -2132,22 +2270,18 @@ remote_print_done (GObject *source, GAsyncResult *result, gpointer data)
 			g_set_error_literal (&remote->error, G_IO_ERROR, G_IO_ERROR_INVALID_DATA, "Invalid print response");
 		}
 	}
-	g_dbus_connection_signal_unsubscribe (session->connection, remote->subscription);
-	remote->subscription = 0;
-	remote->running = FALSE;
-	g_signal_emit (op, signals[DONE], 0, response);
+	remote_print_finish (op, response);
 	g_object_unref (op);
 }
 
 static void
-remote_print_run (PpsPrintOperation *op, GtkWindow *parent)
+remote_print_start (PpsPrintOperation *op)
 {
 	PpsPrintOperationRemote *remote = (PpsPrintOperationRemote *) op;
 	PpsPrintOperationPrint *print = PPS_PRINT_OPERATION_PRINT (op);
 	PpsDocumentSession *session = _pps_document_proxy_get_session (op->document);
-	g_return_if_fail (!remote->running);
-	g_clear_error (&remote->error);
-	remote->running = TRUE;
+	if (!remote->running)
+		return;
 	remote->subscription = g_dbus_connection_signal_subscribe (
 	    session->connection, NULL, "org.gnome.Papers.Document", NULL,
 	    PPS_DOCUMENT_WORKER_PATH, NULL, G_DBUS_SIGNAL_FLAGS_NONE,
@@ -2163,15 +2297,69 @@ remote_print_run (PpsPrintOperation *op, GtkWindow *parent)
 	    gtk_print_settings_to_gvariant (settings ? settings : default_settings),
 	    gtk_page_setup_to_gvariant (setup ? setup : default_setup),
 	    pps_print_operation_get_job_name (op), MAX (0, current_page),
-	    pps_print_operation_get_embed_page_setup (op), G_DBUS_CALL_FLAGS_NONE,
+	    pps_print_operation_get_embed_page_setup (op), remote->parent_handle ? remote->parent_handle : "", G_DBUS_CALL_FLAGS_NONE,
 	    G_MAXINT, NULL, remote_print_done, g_object_ref (op));
 }
+
+#ifdef GDK_WINDOWING_WAYLAND
+static void
+remote_parent_exported (GdkToplevel *surface, const char *handle, gpointer data)
+{
+	PpsPrintOperation *op = g_object_ref (data);
+	PpsPrintOperationRemote *remote = (PpsPrintOperationRemote *) op;
+	if (remote->running) {
+		remote->parent_handle = g_strconcat ("wayland:", handle, NULL);
+		remote_print_start (op);
+	} else {
+		gdk_wayland_toplevel_drop_exported_handle (surface, handle);
+	}
+	g_object_unref (op);
+}
+#endif
+
+static void
+remote_parent_unrealized (GtkWidget *parent, PpsPrintOperation *op)
+{
+	pps_print_operation_cancel (op);
+}
+
+G_GNUC_BEGIN_IGNORE_DEPRECATIONS
+static void
+remote_print_run (PpsPrintOperation *op, GtkWindow *parent)
+{
+	PpsPrintOperationRemote *remote = (PpsPrintOperationRemote *) op;
+	g_return_if_fail (!remote->running);
+	g_clear_error (&remote->error);
+	remote->running = TRUE;
+	if (parent) {
+		g_weak_ref_set (&remote->parent_window, parent);
+		remote->parent_handler = g_signal_connect_object (parent, "unrealize", G_CALLBACK (remote_parent_unrealized), op, 0);
+		GdkSurface *surface = gtk_native_get_surface (GTK_NATIVE (parent));
+		if (surface)
+			remote->parent_surface = g_object_ref (surface);
+#ifdef GDK_WINDOWING_WAYLAND
+		if (GDK_IS_WAYLAND_TOPLEVEL (surface)) {
+			if (gdk_wayland_toplevel_export_handle (GDK_TOPLEVEL (surface), remote_parent_exported, g_object_ref (op), g_object_unref))
+				return;
+			g_object_unref (op);
+		}
+#endif
+#ifdef GDK_WINDOWING_X11
+		if (GDK_IS_X11_SURFACE (surface))
+			remote->parent_handle = g_strdup_printf ("x11:%lx", GDK_SURFACE_XID (surface));
+#endif
+	}
+	remote_print_start (op);
+}
+G_GNUC_END_IGNORE_DEPRECATIONS
 
 static void
 remote_print_cancel (PpsPrintOperation *op)
 {
 	PpsPrintOperationRemote *remote = (PpsPrintOperationRemote *) op;
-	if (remote->running)
+	if (remote->running && !remote->subscription)
+		remote_print_finish (op, GTK_PRINT_OPERATION_RESULT_CANCEL);
+	else if (remote->running)
 		pps_dbus_document_call_cancel_print (_pps_document_proxy_get_session (op->document)->proxy,
 		                                     G_DBUS_CALL_FLAGS_NONE, -1, NULL, NULL, NULL);
 }
@@ -2187,6 +2375,9 @@ remote_print_get_error (PpsPrintOperation *op, GError **error)
 static void
 remote_print_finalize (GObject *object)
 {
+	PpsPrintOperationRemote *remote = (PpsPrintOperationRemote *) object;
+	remote_clear_parent (remote);
+	g_weak_ref_clear (&remote->parent_window);
 	g_clear_error (&((PpsPrintOperationRemote *) object)->error);
 	G_OBJECT_CLASS (pps_print_operation_remote_parent_class)->finalize (object);
 }
@@ -2194,6 +2385,7 @@ remote_print_finalize (GObject *object)
 static void
 pps_print_operation_remote_init (PpsPrintOperationRemote *remote)
 {
+	g_weak_ref_init (&remote->parent_window, NULL);
 }
 
 static void

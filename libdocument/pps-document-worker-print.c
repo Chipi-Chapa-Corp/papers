@@ -39,7 +39,7 @@ print_done (PpsPrintOperation *op, GtkPrintOperationResult result, Worker *worke
 }
 
 static gboolean
-print_document (PpsDBusDocument *interface, GDBusMethodInvocation *invocation, GVariant *settings_data, GVariant *setup_data, const char *title, int current_page, gboolean embed_page_setup, Worker *worker)
+print_document (PpsDBusDocument *interface, GDBusMethodInvocation *invocation, GVariant *settings_data, GVariant *setup_data, const char *title, int current_page, gboolean embed_page_setup, const char *parent_handle, Worker *worker)
 {
 	if (!pps_document_worker_check_document (worker, PPS_TYPE_DOCUMENT_PRINT, invocation))
 		return TRUE;
@@ -62,7 +62,7 @@ print_document (PpsDBusDocument *interface, GDBusMethodInvocation *invocation, G
 		return TRUE;
 	}
 	adw_init ();
-	PpsPrintOperation *op = _pps_print_operation_new_for_worker (worker->document);
+	PpsPrintOperation *op = _pps_print_operation_new_for_worker (worker->document, parent_handle);
 	worker->print_operation = G_OBJECT (op);
 	g_object_set_data_full (G_OBJECT (op), "print-invocation", g_object_ref (invocation), g_object_unref);
 	g_object_set_data_full (G_OBJECT (op), "print-interface", g_object_ref (interface), g_object_unref);

@@ -6,6 +6,7 @@
     <method name="Create">
       <arg name="mime_type" type="s" direction="in"/>
       <arg name="interfaces" type="as" direction="out"/>
+      <arg name="annotation_methods" type="u" direction="out"/>
     </method>
     <method name="Load">
       <arg name="uri" type="s" direction="in"/>

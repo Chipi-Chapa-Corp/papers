@@ -3,7 +3,13 @@
 #pragma once
 
 #include "pps-annotation.h"
-#include <gio/gunixfdlist.h>
+#include "pps-document-buffer-private.h"
+
+typedef enum {
+	PPS_ANNOTATION_METHOD_ADD = 1 << 0,
+	PPS_ANNOTATION_METHOD_REMOVE = 1 << 1,
+	PPS_ANNOTATION_METHOD_OVER_MARKUP = 1 << 2,
+} PpsAnnotationMethods;
 
 PPS_PRIVATE
 GVariant *_pps_annotation_to_variant (PpsAnnotation *annotation, GUnixFDList *fd_list, GError **error);

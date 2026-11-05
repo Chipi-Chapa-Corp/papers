@@ -3,6 +3,7 @@
 #include <math.h>
 #include <unistd.h>
 
+#include "pps-document-annotation-private.h"
 #include "pps-document-info-private.h"
 #include "pps-document-misc.h"
 #include "pps-document-proxy-private.h"
@@ -325,12 +326,12 @@ pps_document_proxy_init (PpsDocumentProxy *document)
 	get_private (document)->objects = _pps_document_objects_new ();
 }
 
-static GType
-type_for_interfaces (const char *const *interfaces)
+GType
+_pps_document_proxy_type_for_interfaces (const char *const *interfaces, guint annotation_methods)
 {
 	static GMutex mutex;
 	GType type;
-	guint mask = 0;
+	guint mask = annotation_methods << 16;
 	const struct {
 		GType type;
 		GInterfaceInitFunc init;
@@ -358,7 +359,7 @@ type_for_interfaces (const char *const *interfaces)
 		                                      sizeof (PpsDocumentProxy), NULL, 0);
 		for (guint i = 0; i < G_N_ELEMENTS (capabilities); i++) {
 			if (mask & (1u << i)) {
-				const GInterfaceInfo info = { capabilities[i].init, NULL, NULL };
+				const GInterfaceInfo info = { capabilities[i].init, NULL, GUINT_TO_POINTER (annotation_methods) };
 				g_type_add_interface_static (type, capabilities[i].type, &info);
 			}
 		}
@@ -374,12 +375,17 @@ _pps_document_proxy_new (const char *mime_type, GCancellable *cancellable, GErro
 	g_auto (GStrv) interfaces = NULL;
 	PpsDocument *document;
 	PpsDocumentProxyPrivate *priv;
+	guint annotation_methods;
 
 	if (!session || !pps_dbus_document_call_create_sync (
 			    session->proxy, mime_type, G_DBUS_CALL_FLAGS_NONE, -1,
-			    &interfaces, cancellable, error))
+			    &interfaces, &annotation_methods, cancellable, error))
 		return NULL;
-	document = g_object_new (type_for_interfaces ((const char *const *) interfaces), NULL);
+	if (annotation_methods & ~(PPS_ANNOTATION_METHOD_ADD | PPS_ANNOTATION_METHOD_REMOVE | PPS_ANNOTATION_METHOD_OVER_MARKUP)) {
+		g_set_error_literal (error, G_IO_ERROR, G_IO_ERROR_INVALID_DATA, "Invalid annotation capabilities");
+		return NULL;
+	}
+	document = g_object_new (_pps_document_proxy_type_for_interfaces ((const char *const *) interfaces, annotation_methods), NULL);
 	priv = get_private (document);
 	priv->session = g_steal_pointer (&session);
 	priv->closed_handler = g_signal_connect_object (priv->session->connection, "closed",

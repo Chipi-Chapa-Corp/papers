@@ -6,6 +6,7 @@
 #include <math.h>
 #include <papers-document.h>
 
+#include "pps-document-annotation-private.h"
 #include "pps-document-buffer-private.h"
 #include "pps-document-factory-private.h"
 #include "pps-document-info-private.h"
@@ -50,8 +51,18 @@ create_document (PpsDBusDocument *interface,
 			g_ptr_array_add (interfaces, (gpointer) g_type_name (supported[i]));
 	}
 	g_ptr_array_add (interfaces, NULL);
+	guint annotation_methods = 0;
+	if (PPS_IS_DOCUMENT_ANNOTATIONS (worker->document)) {
+		PpsDocumentAnnotations *annotations = PPS_DOCUMENT_ANNOTATIONS (worker->document);
+		if (pps_document_annotations_can_add_annotation (annotations))
+			annotation_methods |= PPS_ANNOTATION_METHOD_ADD;
+		if (pps_document_annotations_can_remove_annotation (annotations))
+			annotation_methods |= PPS_ANNOTATION_METHOD_REMOVE;
+		if (PPS_DOCUMENT_ANNOTATIONS_GET_IFACE (annotations)->over_markup)
+			annotation_methods |= PPS_ANNOTATION_METHOD_OVER_MARKUP;
+	}
 	pps_dbus_document_complete_create (interface, invocation,
-	                                   (const char *const *) interfaces->pdata);
+	                                   (const char *const *) interfaces->pdata, annotation_methods);
 	return TRUE;
 }
 

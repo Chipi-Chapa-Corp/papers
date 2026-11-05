@@ -28,6 +28,8 @@ PpsDocument *_pps_document_proxy_new (const char *mime_type,
                                       GCancellable *cancellable,
                                       GError **error);
 PPS_PRIVATE
+GType _pps_document_proxy_type_for_interfaces (const char *const *interfaces, guint annotation_methods);
+PPS_PRIVATE
 PpsDocumentSession *_pps_document_proxy_get_session (PpsDocument *document);
 PPS_PRIVATE
 GVariant *_pps_document_proxy_get_metadata (PpsDocument *document);

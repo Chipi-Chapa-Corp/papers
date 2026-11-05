@@ -7,6 +7,7 @@
 #include <sys/wait.h>
 #include <unistd.h>
 
+#include "pps-document-annotation-private.h"
 #include "pps-document-info-private.h"
 #include "pps-document-session-private.h"
 #include "pps-document.h"
@@ -16,16 +17,18 @@ new_session (void)
 {
 	g_autoptr (GError) error = NULL;
 	g_auto (GStrv) interfaces = NULL;
+	guint annotation_methods;
 	PpsDocumentSession *session = _pps_document_session_new (NULL, &error);
 
 	g_assert_no_error (error);
 	g_assert_nonnull (session);
 	g_assert_true (pps_dbus_document_call_create_sync (
 	    session->proxy, "application/pdf", G_DBUS_CALL_FLAGS_NONE, 5000,
-	    &interfaces, NULL, &error));
+	    &interfaces, &annotation_methods, NULL, &error));
 	g_assert_no_error (error);
 	g_assert_true (g_strv_contains ((const char *const *) interfaces, "PpsDocumentText"));
 	g_assert_true (g_strv_contains ((const char *const *) interfaces, "PpsDocumentSecurity"));
+	g_assert_cmpuint (annotation_methods, ==, PPS_ANNOTATION_METHOD_ADD | PPS_ANNOTATION_METHOD_REMOVE | PPS_ANNOTATION_METHOD_OVER_MARKUP);
 	return session;
 }
 
@@ -132,7 +135,7 @@ reject_invalid_requests (void)
 
 	g_assert_false (pps_dbus_document_call_create_sync (
 	    session->proxy, "application/pdf", G_DBUS_CALL_FLAGS_NONE, 5000,
-	    &interfaces, NULL, &error));
+	    &interfaces, NULL, NULL, &error));
 	g_assert_error (error, G_IO_ERROR, G_IO_ERROR_EXISTS);
 	g_clear_error (&error);
 	g_assert_false (pps_dbus_document_call_get_page_info_sync (

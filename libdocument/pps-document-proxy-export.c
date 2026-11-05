@@ -35,8 +35,7 @@ static void
 begin_export (PpsFileExporter *exporter, PpsFileExporterContext *context)
 {
 	end_export (exporter);
-	if (_pps_file_exporter_get_error (exporter, NULL))
-		return;
+	_pps_file_exporter_take_error (exporter, NULL);
 	if (!context->filename) {
 		_pps_file_exporter_take_error (exporter, g_error_new_literal (G_IO_ERROR, G_IO_ERROR_INVALID_ARGUMENT, "Missing export filename"));
 		return;

@@ -319,7 +319,9 @@ finalization_failure (gconstpointer data)
 	g_autofree char *directory = g_dir_make_tmp ("papers-export-test-XXXXXX", &error);
 	g_assert_no_error (error);
 	g_autofree char *source = create_pdf (directory);
-	g_autoptr (PpsDocument) document = open_document ("application/pdf", source, GPOINTER_TO_INT (data));
+	guint options = GPOINTER_TO_UINT (data);
+	gboolean replace = options & 2;
+	g_autoptr (PpsDocument) document = open_document ("application/pdf", source, options & 1);
 	int fd = memfd_create ("papers-export-failure", MFD_CLOEXEC | MFD_ALLOW_SEALING);
 	g_assert_cmpint (fd, >=, 0);
 	/* Open succeeds, but the destination cannot grow when Cairo flushes it. */
@@ -331,10 +333,12 @@ finalization_failure (gconstpointer data)
 	pps_file_exporter_begin_page (exporter);
 	export_page (document, 0);
 	pps_file_exporter_end_page (exporter);
-	pps_file_exporter_end (exporter);
-	g_assert_true (_pps_file_exporter_get_error (exporter, &error));
-	g_assert_error (error, G_IO_ERROR, G_IO_ERROR_FAILED);
-	g_clear_error (&error);
+	if (!replace) {
+		pps_file_exporter_end (exporter);
+		g_assert_true (_pps_file_exporter_get_error (exporter, &error));
+		g_assert_error (error, G_IO_ERROR, G_IO_ERROR_FAILED);
+		g_clear_error (&error);
+	}
 	close (fd);
 	g_autofree char *valid = g_build_filename (directory, "valid.pdf", NULL);
 	context.filename = valid;
@@ -367,6 +371,8 @@ main (int argc, char **argv)
 	g_test_add_func ("/document-export/descriptor-and-errors", export_descriptor_and_errors);
 	g_test_add_data_func ("/document-export/native-finalization-failure", GINT_TO_POINTER (FALSE), finalization_failure);
 	g_test_add_data_func ("/document-export/proxy-finalization-failure", GINT_TO_POINTER (TRUE), finalization_failure);
+	g_test_add_data_func ("/document-export/native-replace-failed-export", GUINT_TO_POINTER (2), finalization_failure);
+	g_test_add_data_func ("/document-export/proxy-replace-failed-export", GUINT_TO_POINTER (3), finalization_failure);
 	int result = g_test_run ();
 	pps_shutdown ();
 	return result;

@@ -379,7 +379,7 @@ impl imp::PpsDocumentView {
                 let result = dialog.save_future(Some(&obj.parent_window())).await;
 
                 match result {
-                    Err(_) => obj.close_after_save.set(false),
+                    Err(_) => obj.finish_close(false),
                     Ok(file) => {
                         obj.file_dialog_save_folder(Some(&file), UserDirectory::Documents);
 
@@ -397,7 +397,7 @@ impl imp::PpsDocumentView {
                             move |job| {
                                 match job.is_succeeded() {
                                     Err(e) => {
-                                        obj.close_after_save.set(false);
+                                        obj.finish_close(false);
                                         obj.error_message(
                                             Some(&e),
                                             &formatx!(
@@ -421,7 +421,7 @@ impl imp::PpsDocumentView {
                                         #[weak]
                                         obj,
                                         move || {
-                                            obj.parent_window().destroy();
+                                            obj.finish_close(true);
                                         }
                                     ));
                                 }

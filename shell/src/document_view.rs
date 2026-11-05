@@ -24,6 +24,8 @@ mod io;
 mod print;
 /// Signal handling callbacks of this widget
 mod signals;
+#[cfg(test)]
+mod tests;
 
 const GS_LOCKDOWN_PRINT_SETUP: &str = "disable-print-setup";
 const GS_LOCKDOWN_PRINT: &str = "disable-printing";
@@ -167,6 +169,7 @@ mod imp {
         pub(super) sidebar_was_open_before_collapsed: Cell<bool>,
         pub(super) close_after_save: Cell<bool>,
         pub(super) close_after_print: Cell<bool>,
+        pub(super) closing: Cell<bool>,
         pub(super) modified: Cell<bool>,
         pub(super) progress_cancellable: RefCell<Option<gio::Cancellable>>,
 
@@ -262,6 +265,9 @@ mod imp {
                 vec![
                     Signal::builder("visibility-changed").run_last().build(),
                     Signal::builder("update-visibility").run_last().build(),
+                    Signal::builder("close-finished")
+                        .param_types([bool::static_type()])
+                        .build(),
                 ]
             })
         }
@@ -848,9 +854,8 @@ mod imp {
                                 obj.close_after_save.set(true);
                                 obj.save_as();
                             }
-                            "no" => obj.parent_window().destroy(),
-                            "cancel" => obj.close_after_save.set(false),
-                            _ => (),
+                            "no" => obj.finish_close(true),
+                            _ => obj.finish_close(false),
                         };
                     }
                 ),
@@ -861,22 +866,32 @@ mod imp {
             true
         }
 
-        pub(super) fn close_handled(&self) -> glib::Propagation {
-            self.save_settings();
-
-            if let Some(id) = self.modified_handler_id.take() {
-                self.document().unwrap().disconnect(id);
+        pub(super) fn request_close(&self) {
+            if self.closing.replace(true) {
+                return;
             }
 
-            if self.check_document_modified() {
-                return glib::Propagation::Stop;
+            if !self.check_document_modified() {
+                self.finish_close(true);
+            }
+        }
+
+        pub(super) fn finish_close(&self, allowed: bool) {
+            if !self.closing.get() || (allowed && self.check_print_queue()) {
+                return;
             }
 
-            if self.check_print_queue() {
-                return glib::Propagation::Stop;
+            if allowed {
+                self.save_settings();
+                if let Some(id) = self.modified_handler_id.take() {
+                    self.document().unwrap().disconnect(id);
+                }
             }
 
-            glib::Propagation::Proceed
+            self.closing.set(false);
+            self.close_after_save.set(false);
+            self.close_after_print.set(false);
+            self.obj().emit_by_name::<()>("close-finished", &[&allowed]);
         }
     }
 }
@@ -929,8 +944,8 @@ impl PpsDocumentView {
         self.imp().model.set_inverted_colors(inverted);
     }
 
-    pub fn close_handled(&self) -> glib::Propagation {
-        self.imp().close_handled()
+    pub fn request_close(&self) {
+        self.imp().request_close()
     }
 
     pub fn set_filenames(&self, display_name: &str, edit_name: &str) {

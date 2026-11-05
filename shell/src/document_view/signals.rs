@@ -139,7 +139,7 @@ impl imp::PpsDocumentView {
         match response {
             "close-later" => {
                 if self.print_queue.borrow().is_empty() {
-                    self.parent_window().destroy();
+                    self.finish_close(true);
                 } else {
                     self.close_after_print.set(true);
                 }
@@ -151,7 +151,7 @@ impl imp::PpsDocumentView {
                     self.print_cancel();
                 }
             }
-            _ => self.close_after_print.set(false),
+            _ => self.finish_close(false),
         }
     }
 

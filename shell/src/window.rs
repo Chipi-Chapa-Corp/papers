@@ -128,15 +128,8 @@ mod imp {
 
     impl WindowImpl for PpsWindow {
         fn close_request(&self) -> glib::Propagation {
-            if self.document_view.close_handled() == glib::Propagation::Stop {
-                return glib::Propagation::Stop;
-            }
-
-            if self.check_document_modified_reload() {
-                return glib::Propagation::Stop;
-            }
-
-            self.parent_close_request()
+            self.document_view.request_close();
+            glib::Propagation::Stop
         }
     }
 
@@ -1160,6 +1153,13 @@ mod imp {
 
     #[gtk::template_callbacks]
     impl PpsWindow {
+        #[template_callback]
+        fn document_view_close_finished(&self, allowed: bool) {
+            if allowed {
+                self.obj().destroy();
+            }
+        }
+
         #[template_callback]
         fn window_fullscreened(&self) {
             let obj = self.obj();

@@ -126,7 +126,7 @@ impl imp::PpsDocumentView {
                 #[weak(rename_to = obj)]
                 self,
                 move || {
-                    obj.parent_window().destroy();
+                    obj.finish_close(true);
                 }
             ));
         }

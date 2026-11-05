@@ -105,7 +105,9 @@ template $PpsWindow: Adw.ApplicationWindow {
       Adw.ViewStackPage {
         name: "document";
 
-        child: $PpsDocumentView document_view {};
+        child: $PpsDocumentView document_view {
+          close-finished => $document_view_close_finished() swapped;
+        };
       }
 
       Adw.ViewStackPage {

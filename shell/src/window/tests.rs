@@ -5,7 +5,8 @@ use crate::tests::{fixture, wait_until};
 fn document_menu_moves_and_detaches_its_target_page() {
     crate::tests::run(|| {
         let window = PpsWindow::new();
-        window.open(&fixture("utf16le-annot.pdf"), None, None);
+        let file = crate::tests::multipage_fixture();
+        window.open(&file, None, None);
         let first = window.imp().current_tab().unwrap();
         window.open(&fixture("ink_annotations.pdf"), None, None);
         let second = window.imp().current_tab().unwrap();
@@ -14,6 +15,14 @@ fn document_menu_moves_and_detaches_its_target_page() {
             first.document().is_some() && second.document().is_some()
         });
         let document = first.document();
+        let document_view =
+            crate::tests::find_widget_where::<PpsDocumentView>(&first, &|_| true).unwrap();
+        let model = document_view.model();
+        model.set_page(2);
+        model.set_rotation(90);
+        model.set_sizing_mode(papers_view::SizingMode::Free);
+        model.set_scale(1.75);
+        model.set_continuous(false);
         let view = window.imp().tabs.get();
         let page = view.page(&first);
         view.emit_by_name::<()>("setup-menu", &[&Some(page.clone())]);
@@ -31,10 +40,16 @@ fn document_menu_moves_and_detaches_its_target_page() {
         let destination = first.root().and_downcast::<PpsWindow>().unwrap();
         assert_ne!(destination, window);
         assert_eq!(first.document(), document);
+        assert_eq!(document_view.model(), model);
+        assert_eq!(model.page(), 2);
+        assert_eq!(model.rotation(), 90);
+        assert_eq!(model.scale(), 1.75);
+        assert!(!model.is_continuous());
         assert_eq!(view.n_pages(), 1);
         assert_eq!(destination.imp().tabs.n_pages(), 1);
         window.close();
         destination.close();
+        file.delete(gio::Cancellable::NONE).unwrap();
     });
 }
 

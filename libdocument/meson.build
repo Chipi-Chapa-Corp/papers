@@ -176,6 +176,7 @@ libppsdocument = shared_library(
     'pps-document-proxy-forms.c',
     'pps-document-proxy-attachments.c',
     'pps-document-proxy-annotations.c',
+    'pps-document-proxy-fonts.c',
     'pps-document-geometry.c',
     'pps-document-objects.c',
     'pps-document-variant.c',

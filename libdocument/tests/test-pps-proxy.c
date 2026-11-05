@@ -1177,6 +1177,79 @@ annotation_attachment_batches (void)
 	g_assert_cmpint (g_unlink (path), ==, 0);
 }
 
+static void
+font_information (void)
+{
+	const char *content = "BT /F1 12 Tf 10 60 Td (Standard) Tj /F2 12 Tf 0 -20 Td (Substitute) Tj ET\n";
+	g_autofree char *stream = g_strdup_printf ("<< /Length %zu >>\nstream\n%sendstream", strlen (content), content);
+	const char *objects[] = {
+		"<< /Type /Catalog /Pages 2 0 R >>",
+		"<< /Type /Pages /Count 1 /Kids [3 0 R] >>",
+		"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 100 100] /Resources << /Font << /F1 5 0 R /F2 6 0 R >> >> /Contents 4 0 R >>",
+		stream,
+		"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+		"<< /Type /Font /Subtype /Type1 /BaseFont /UnknownFont#FF >>",
+	};
+	g_autofree char *path = write_pdf_fixture ("fonts.pdf", objects, G_N_ELEMENTS (objects));
+	g_autofree char *uri = g_filename_to_uri (path, NULL, NULL);
+	g_autoptr (PpsDocument) document = new_document ();
+	load_document (document, uri);
+	g_assert_true (PPS_IS_DOCUMENT_FONTS (document));
+	PpsDocumentFonts *fonts = PPS_DOCUMENT_FONTS (document);
+	g_assert_null (pps_document_fonts_get_model (fonts));
+	g_autofree char *before = g_strdup (pps_document_fonts_get_fonts_summary (fonts));
+	g_assert_nonnull (before);
+	pps_document_fonts_scan (fonts);
+	g_autoptr (GListModel) model = pps_document_fonts_get_model (fonts);
+	g_assert_nonnull (model);
+	g_assert_cmpuint (g_list_model_get_n_items (model), ==, 2);
+	g_assert_cmpuint (g_list_model_get_item_type (model), ==, PPS_TYPE_FONT_DESCRIPTION);
+	g_assert_nonnull (pps_document_fonts_get_fonts_summary (fonts));
+	g_assert_cmpstr (pps_document_fonts_get_fonts_summary (fonts), !=, before);
+	/* A fresh scan must still produce the complete list. */
+	pps_document_fonts_scan (fonts);
+	g_autoptr (GListModel) again = pps_document_fonts_get_model (fonts);
+	g_assert_cmpuint (g_list_model_get_n_items (again), ==, 2);
+	g_clear_object (&document);
+	gboolean standard = FALSE, substitute = FALSE;
+	for (guint i = 0; i < g_list_model_get_n_items (model); i++) {
+		g_autoptr (GObject) font = g_list_model_get_item (model, i);
+		g_autofree char *name = NULL, *details = NULL;
+		g_object_get (font, "name", &name, "details", &details, NULL);
+		g_assert_nonnull (name);
+		g_assert_true (g_utf8_validate (name, -1, NULL));
+		g_assert_nonnull (details);
+		g_assert_true (g_utf8_validate (details, -1, NULL));
+		g_assert_cmpstr (details, !=, "");
+		standard |= g_str_equal (name, "Helvetica");
+		substitute |= g_str_equal (name, "UnknownFont\357\277\275");
+	}
+	g_assert_true (standard);
+	g_assert_true (substitute);
+	g_assert_cmpint (g_unlink (path), ==, 0);
+}
+
+static void
+no_fonts (void)
+{
+	const char *objects[] = {
+		"<< /Type /Catalog /Pages 2 0 R >>",
+		"<< /Type /Pages /Count 1 /Kids [3 0 R] >>",
+		"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 100 100] /Resources << >> /Contents 4 0 R >>",
+		"<< /Length 0 >>\nstream\nendstream",
+	};
+	g_autofree char *path = write_pdf_fixture ("no-fonts.pdf", objects, G_N_ELEMENTS (objects));
+	g_autofree char *uri = g_filename_to_uri (path, NULL, NULL);
+	g_autoptr (PpsDocument) document = new_document ();
+	load_document (document, uri);
+	PpsDocumentFonts *fonts = PPS_DOCUMENT_FONTS (document);
+	pps_document_fonts_scan (fonts);
+	g_assert_null (pps_document_fonts_get_model (fonts));
+	g_assert_nonnull (pps_document_fonts_get_fonts_summary (fonts));
+	render_page (document, 0);
+	g_assert_cmpint (g_unlink (path), ==, 0);
+}
+
 int
 main (int argc, char **argv)
 {
@@ -1199,6 +1272,8 @@ main (int argc, char **argv)
 	g_test_add_func ("/document-proxy/annotation-capabilities", annotation_capabilities);
 	g_test_add_func ("/document-proxy/annotation-scope-and-errors", annotation_scope_and_errors);
 	g_test_add_func ("/document-proxy/annotation-attachment-batches", annotation_attachment_batches);
+	g_test_add_func ("/document-proxy/font-information", font_information);
+	g_test_add_func ("/document-proxy/no-fonts", no_fonts);
 	int result = g_test_run ();
 	g_unlink (fixture_path);
 	g_rmdir (fixture_dir);

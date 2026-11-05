@@ -414,6 +414,7 @@ main (int argc, char **argv)
 	g_clear_pointer (&worker.attachments, g_ptr_array_unref);
 	g_clear_pointer (&worker.annotations, g_hash_table_unref);
 	g_clear_pointer (&worker.images, g_hash_table_unref);
+	g_clear_pointer (&objects, _pps_document_objects_free);
 	g_clear_object (&worker.document);
 	pps_shutdown ();
 	return 0;

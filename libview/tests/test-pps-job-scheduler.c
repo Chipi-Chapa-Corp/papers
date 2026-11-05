@@ -228,6 +228,17 @@ foreground_responsiveness (void)
 	g_assert_null (remaining);
 }
 
+static void
+cancel_thumbnail (void)
+{
+	g_autofree char *uri = g_filename_to_uri (TESTDATADIR "/utf16le-annot.pdf", NULL, NULL);
+	g_autoptr (PpsDocument) document = open_document (uri);
+	g_autoptr (PpsJob) job = pps_job_thumbnail_texture_new (document, 0, 0, 1.0);
+	pps_job_cancel (job);
+	pps_job_run (job);
+	g_assert_null (pps_job_thumbnail_texture_get_texture (PPS_JOB_THUMBNAIL_TEXTURE (job)));
+}
+
 int
 main (int argc, char **argv)
 {
@@ -236,6 +247,7 @@ main (int argc, char **argv)
 	g_test_add_func ("/job-scheduler/independent-documents", independent_documents);
 	g_test_add_func ("/job-scheduler/cancel-running-job", cancel_running_job);
 	g_test_add_func ("/job-scheduler/foreground-responsiveness", foreground_responsiveness);
+	g_test_add_func ("/job-scheduler/cancel-thumbnail", cancel_thumbnail);
 	int result = g_test_run ();
 	pps_shutdown ();
 	return result;

@@ -614,8 +614,10 @@ pps_job_thumbnail_texture_run (PpsJob *job)
 
 	surface = pps_document_get_thumbnail_surface (pps_job_get_document (job), rc);
 
-	priv->thumbnail_texture = pps_document_misc_texture_from_surface (surface);
-	cairo_surface_destroy (surface);
+	if (surface) {
+		priv->thumbnail_texture = pps_document_misc_texture_from_surface (surface);
+		cairo_surface_destroy (surface);
+	}
 	g_object_unref (rc);
 	PPS_PROFILER_STOP ();
 

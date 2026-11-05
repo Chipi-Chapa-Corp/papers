@@ -4494,8 +4494,8 @@ pdf_document_signatures_sign (PpsDocumentSignatures *document,
 	g_autofree gchar *uuid = NULL;
 	PopplerRectangle signing_rect;
 	PpsRectangle *rect;
-	PpsPage *page = pps_document_get_page (PPS_DOCUMENT (document),
-	                                       pps_signature_get_page (signature));
+	g_autoptr (PpsPage) page = pps_document_get_page (PPS_DOCUMENT (document),
+	                                               pps_signature_get_page (signature));
 	PopplerColor color;
 	GdkRGBA rgba;
 
@@ -4623,8 +4623,9 @@ pdf_document_get_certificate_info (PpsDocumentSignatures *document,
 
 	g_rw_lock_reader_lock (&self->rwlock);
 
-	for (list = pdf_document_get_available_signing_certificates (document); list != NULL && list->data != NULL; list = list->next) {
-		PpsCertificateInfo *cert_info = list->data;
+	list = pdf_document_get_available_signing_certificates (document);
+	for (GList *item = list; item; item = item->next) {
+		PpsCertificateInfo *cert_info = item->data;
 		g_autofree char *certificate_id = NULL;
 
 		g_object_get (cert_info, "id", &certificate_id, NULL);

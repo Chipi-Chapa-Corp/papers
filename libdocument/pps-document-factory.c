@@ -16,8 +16,8 @@
 #include <gtk/gtk.h>
 
 #include "pps-backend-info.h"
-#include "pps-document-factory.h"
 #include "pps-document-factory-private.h"
+#include "pps-document-factory.h"
 #include "pps-file-helpers.h"
 
 /* Backends manager */

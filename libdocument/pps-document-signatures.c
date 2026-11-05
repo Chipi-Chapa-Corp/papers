@@ -119,8 +119,7 @@ pps_document_signatures_sign_finish (PpsDocumentSignatures *document_signatures,
 	PpsDocumentSignaturesInterface *iface = PPS_DOCUMENT_SIGNATURES_GET_IFACE (document_signatures);
 
 	if (iface->sign_finish) {
-		iface->sign_finish (document_signatures, result, error);
-		return TRUE;
+		return iface->sign_finish (document_signatures, result, error);
 	}
 
 	return FALSE;

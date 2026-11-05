@@ -148,12 +148,12 @@ signing_errors (void)
 	g_autofree char *path = g_build_filename (fixture_dir, "missing-directory", "signed.pdf", NULL);
 	g_autoptr (PpsSignature) signature = new_signature (certificate, path);
 	g_autoptr (GError) error = NULL;
-	sign_document (document, signature, NULL, &error);
+	g_assert_false (sign_document (document, signature, NULL, &error));
 	g_assert_nonnull (error);
 	g_clear_error (&error);
 	g_autoptr (GCancellable) cancellable = g_cancellable_new ();
 	g_cancellable_cancel (cancellable);
-	sign_document (document, signature, cancellable, &error);
+	g_assert_false (sign_document (document, signature, cancellable, &error));
 	g_assert_error (error, G_IO_ERROR, G_IO_ERROR_CANCELLED);
 	pps_document_signatures_set_password_callback (PPS_DOCUMENT_SIGNATURES (document), NULL, NULL);
 }

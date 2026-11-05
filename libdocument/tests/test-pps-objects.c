@@ -250,6 +250,24 @@ signature_date_properties (void)
 	g_assert_cmpint (g_date_time_get_microsecond (signed_at), ==, 123456);
 }
 
+static void
+signature_certificate_lifetime (void)
+{
+	g_autoptr (PpsSignature) signature = g_object_new (PPS_TYPE_SIGNATURE, NULL);
+	g_autoptr (PpsCertificateInfo) certificate = NULL;
+	g_object_get (signature, "certificate-info", &certificate, NULL);
+	g_assert_null (certificate);
+	g_clear_object (&signature);
+	certificate = g_object_new (PPS_TYPE_CERTIFICATE_INFO, "id", "signer", NULL);
+	signature = pps_signature_new (PPS_SIGNATURE_STATUS_VALID, certificate);
+	g_clear_object (&certificate);
+	g_object_get (signature, "certificate-info", &certificate, NULL);
+	g_clear_object (&signature);
+	g_autofree char *id = NULL;
+	g_object_get (certificate, "id", &id, NULL);
+	g_assert_cmpstr (id, ==, "signer");
+}
+
 int
 main (int argc, char **argv)
 {
@@ -265,5 +283,6 @@ main (int argc, char **argv)
 	g_test_add_func ("/document-objects/media-temp-file-lifetime", media_temp_file_lifetime);
 	g_test_add_func ("/document-objects/export-error-lifetime", export_error_lifetime);
 	g_test_add_func ("/document-objects/signature-date-properties", signature_date_properties);
+	g_test_add_func ("/document-objects/signature-certificate-lifetime", signature_certificate_lifetime);
 	return g_test_run ();
 }

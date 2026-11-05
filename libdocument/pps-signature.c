@@ -102,8 +102,7 @@ pps_signature_set_property (GObject *object,
 		break;
 
 	case PROP_CERTIFICATE_INFO:
-		g_clear_object (&priv->certificate_info);
-		priv->certificate_info = g_object_ref (g_value_get_object (value));
+		g_set_object (&priv->certificate_info, g_value_get_object (value));
 		break;
 
 	default:

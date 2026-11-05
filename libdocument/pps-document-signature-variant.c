@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
+#include "pps-document-geometry-private.h"
 #include "pps-document-signature-private.h"
 #include "pps-document-variant-private.h"
 
@@ -93,5 +94,103 @@ _pps_signature_info_from_variant (GVariant *value, GError **error)
 	return g_object_new (PPS_TYPE_SIGNATURE, "certificate-info", certificate, "signature-time", time, "status", status, NULL);
 invalid:
 	g_set_error_literal (error, G_IO_ERROR, G_IO_ERROR_INVALID_DATA, "Invalid document signature information");
+	return NULL;
+}
+
+GVariant *
+_pps_signature_signing_data_to_variant (PpsSignature *signature)
+{
+	g_autoptr (GVariant) info = g_variant_ref_sink (_pps_signature_info_to_variant (signature));
+	GVariantDict dict;
+	g_variant_dict_init (&dict, info);
+	g_variant_dict_insert (&dict, "page", "i", pps_signature_get_page (signature));
+	g_variant_dict_insert (&dict, "font-size", "i", pps_signature_get_font_size (signature));
+	g_variant_dict_insert (&dict, "left-font-size", "i", pps_signature_get_left_font_size (signature));
+	g_variant_dict_insert (&dict, "border-width", "i", pps_signature_get_border_width (signature));
+	PpsRectangle *rect = pps_signature_get_rect (signature);
+	if (rect)
+		g_variant_dict_insert (&dict, "rect", "(dddd)", rect->x1, rect->y1, rect->x2, rect->y2);
+	const struct {
+		const char *name;
+		const char *value;
+	} strings[] = {
+		{ "signature", pps_signature_get_signature (signature) },
+		{ "signature-left", pps_signature_get_signature_left (signature) },
+		{ "password", pps_signature_get_password (signature) },
+		{ "owner-password", pps_signature_get_owner_password (signature) },
+		{ "user-password", pps_signature_get_user_password (signature) },
+	};
+	for (guint i = 0; i < G_N_ELEMENTS (strings); i++) {
+		if (strings[i].value)
+			g_variant_dict_insert (&dict, strings[i].name, "s", strings[i].value);
+	}
+	GdkRGBA color;
+	pps_signature_get_font_color (signature, &color);
+	g_variant_dict_insert_value (&dict, "font-color", _pps_rgba_to_variant (&color));
+	pps_signature_get_border_color (signature, &color);
+	g_variant_dict_insert_value (&dict, "border-color", _pps_rgba_to_variant (&color));
+	pps_signature_get_background_color (signature, &color);
+	g_variant_dict_insert_value (&dict, "background-color", _pps_rgba_to_variant (&color));
+	return g_variant_dict_end (&dict);
+}
+
+PpsSignature *
+_pps_signature_signing_data_from_variant (GVariant *value, GError **error)
+{
+	g_autoptr (PpsSignature) signature = _pps_signature_info_from_variant (value, error);
+	g_autoptr (GVariant) rect_value = NULL;
+	PpsRectangle rect;
+	int page, font_size, left_font_size, border_width;
+	if (!signature)
+		return NULL;
+	if (!g_variant_lookup (value, "page", "i", &page) || page < 0 ||
+	    !g_variant_lookup (value, "font-size", "i", &font_size) || font_size < 0 ||
+	    !g_variant_lookup (value, "left-font-size", "i", &left_font_size) || left_font_size < 0 ||
+	    !g_variant_lookup (value, "border-width", "i", &border_width) || border_width < 0)
+		goto invalid;
+	rect_value = g_variant_lookup_value (value, "rect", NULL);
+	if (!rect_value || !_pps_rectangle_from_variant (rect_value, &rect) || rect.x1 >= rect.x2 || rect.y1 >= rect.y2)
+		goto invalid;
+	pps_signature_set_page (signature, page);
+	pps_signature_set_font_size (signature, font_size);
+	pps_signature_set_left_font_size (signature, left_font_size);
+	pps_signature_set_border_width (signature, border_width);
+	pps_signature_set_rect (signature, &rect);
+	const struct {
+		const char *name;
+		void (*set) (PpsSignature *, const char *);
+	} strings[] = {
+		{ "signature", pps_signature_set_signature },
+		{ "signature-left", pps_signature_set_signature_left },
+		{ "password", pps_signature_set_password },
+		{ "owner-password", pps_signature_set_owner_password },
+		{ "user-password", pps_signature_set_user_password },
+	};
+	for (guint i = 0; i < G_N_ELEMENTS (strings); i++) {
+		g_autofree char *text = NULL;
+		if (!_pps_variant_read_string (value, strings[i].name, &text))
+			goto invalid;
+		strings[i].set (signature, text);
+	}
+	const struct {
+		const char *name;
+		void (*set) (PpsSignature *, GdkRGBA *);
+	} colors[] = {
+		{ "font-color", pps_signature_set_font_color },
+		{ "border-color", pps_signature_set_border_color },
+		{ "background-color", pps_signature_set_background_color },
+	};
+	for (guint i = 0; i < G_N_ELEMENTS (colors); i++) {
+		g_autoptr (GVariant) color_value = g_variant_lookup_value (value, colors[i].name, NULL);
+		GdkRGBA color;
+		if (!color_value || !_pps_rgba_from_variant (color_value, &color) ||
+		    color.red < 0 || color.red > 1 || color.green < 0 || color.green > 1 ||
+		    color.blue < 0 || color.blue > 1 || color.alpha < 0 || color.alpha > 1)
+			goto invalid;
+		colors[i].set (signature, &color);
+	}
+	return g_steal_pointer (&signature);
+invalid:
+	g_set_error_literal (error, G_IO_ERROR, G_IO_ERROR_INVALID_DATA, "Invalid document signing data");
 	return NULL;
 }

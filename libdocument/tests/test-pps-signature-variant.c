@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
+#include <math.h>
+
 #include "pps-document-signature-private.h"
 
 static void
@@ -116,6 +118,114 @@ invalid_information (void)
 	}
 }
 
+static void
+signing_data_roundtrip (void)
+{
+	g_autoptr (PpsCertificateInfo) certificate = g_object_new (PPS_TYPE_CERTIFICATE_INFO, "id", "signer", NULL);
+	g_autoptr (PpsSignature) signature = pps_signature_new (PPS_SIGNATURE_STATUS_INVALID, certificate);
+	PpsRectangle rect = { 10.5, 20.25, 200, 150 };
+	GdkRGBA font = { .125, .25, .5, 1 }, border = { 1, 0, 0, .5 }, background = { 0, 1, 0, 0 };
+	pps_signature_set_rect (signature, &rect);
+	pps_signature_set_page (signature, 3);
+	pps_signature_set_font_size (signature, 14);
+	pps_signature_set_left_font_size (signature, 24);
+	pps_signature_set_border_width (signature, 2);
+	pps_signature_set_font_color (signature, &font);
+	pps_signature_set_border_color (signature, &border);
+	pps_signature_set_background_color (signature, &background);
+	pps_signature_set_signature (signature, "Signed by α\nDate: 2024-03-27");
+	pps_signature_set_signature_left (signature, "");
+	pps_signature_set_password (signature, "certificate password");
+	pps_signature_set_owner_password (signature, "owner password");
+	pps_signature_set_user_password (signature, "user password");
+	pps_signature_set_destination_file (signature, "/destination/stays/in/caller");
+	g_autoptr (GVariant) value = g_variant_ref_sink (_pps_signature_signing_data_to_variant (signature));
+	g_autoptr (GError) error = NULL;
+	g_autoptr (PpsSignature) copy = _pps_signature_signing_data_from_variant (value, &error);
+	g_assert_no_error (error);
+	g_assert_nonnull (copy);
+	g_clear_object (&signature);
+	g_assert_cmpint (pps_signature_get_page (copy), ==, 3);
+	g_assert_cmpint (pps_signature_get_font_size (copy), ==, 14);
+	g_assert_cmpint (pps_signature_get_left_font_size (copy), ==, 24);
+	g_assert_cmpint (pps_signature_get_border_width (copy), ==, 2);
+	g_assert_cmpstr (pps_signature_get_signature (copy), ==, "Signed by α\nDate: 2024-03-27");
+	g_assert_cmpstr (pps_signature_get_signature_left (copy), ==, "");
+	g_assert_cmpstr (pps_signature_get_password (copy), ==, "certificate password");
+	g_assert_cmpstr (pps_signature_get_owner_password (copy), ==, "owner password");
+	g_assert_cmpstr (pps_signature_get_user_password (copy), ==, "user password");
+	g_assert_null (pps_signature_get_destination_file (copy));
+	g_assert_cmpfloat (pps_signature_get_rect (copy)->x1, ==, rect.x1);
+	GdkRGBA color;
+	pps_signature_get_font_color (copy, &color);
+	g_assert_true (gdk_rgba_equal (&font, &color));
+	pps_signature_get_border_color (copy, &color);
+	g_assert_true (gdk_rgba_equal (&border, &color));
+	pps_signature_get_background_color (copy, &color);
+	g_assert_true (gdk_rgba_equal (&background, &color));
+	g_autoptr (GVariant) encoded = g_variant_ref_sink (_pps_signature_signing_data_to_variant (copy));
+	g_assert_true (g_variant_equal (value, encoded));
+}
+
+static void
+invalid_signing_data (void)
+{
+	g_autoptr (PpsSignature) signature = g_object_new (PPS_TYPE_SIGNATURE, NULL);
+	PpsRectangle rect = { 0, 0, 100, 100 };
+	pps_signature_set_rect (signature, &rect);
+	g_autoptr (GVariant) value = g_variant_ref_sink (_pps_signature_signing_data_to_variant (signature));
+	g_autoptr (GError) error = NULL;
+	g_autoptr (PpsSignature) copy = _pps_signature_signing_data_from_variant (value, &error);
+	g_assert_no_error (error);
+	g_assert_nonnull (copy);
+	g_assert_null (pps_signature_get_password (copy));
+	g_assert_null (pps_signature_get_signature (copy));
+	g_assert_null (pps_signature_get_signature_left (copy));
+	g_assert_null (pps_signature_get_owner_password (copy));
+	g_assert_null (pps_signature_get_user_password (copy));
+	const struct {
+		const char *key;
+		GVariant *invalid;
+	} cases[] = {
+		{ "page", g_variant_new_int32 (-1) },
+		{ "page", g_variant_new_string ("0") },
+		{ "font-size", g_variant_new_int32 (-1) },
+		{ "left-font-size", g_variant_new_int32 (-1) },
+		{ "border-width", g_variant_new_int32 (-1) },
+		{ "rect", g_variant_new ("(dddd)", 0., 0., 0., 10.) },
+		{ "rect", g_variant_new ("(dddd)", 0., 10., 10., 0.) },
+		{ "rect", g_variant_new ("(dddd)", 0., 0., INFINITY, 10.) },
+		{ "rect", g_variant_new_string ("rectangle") },
+		{ "signature", g_variant_new_boolean (FALSE) },
+		{ "signature-left", g_variant_new_int32 (0) },
+		{ "password", g_variant_new_int32 (0) },
+		{ "owner-password", g_variant_new_int32 (0) },
+		{ "user-password", g_variant_new_int32 (0) },
+		{ "font-color", g_variant_new ("(dddd)", NAN, 0., 0., 1.) },
+		{ "border-color", g_variant_new ("(dddd)", -1., 0., 0., 1.) },
+		{ "background-color", g_variant_new ("(dddd)", 0., 0., 0., 1.1) },
+	};
+	for (guint i = 0; i < G_N_ELEMENTS (cases); i++) {
+		GVariantDict dict;
+		g_variant_dict_init (&dict, value);
+		g_variant_dict_insert_value (&dict, cases[i].key, cases[i].invalid);
+		g_autoptr (GVariant) malformed = g_variant_ref_sink (g_variant_dict_end (&dict));
+		g_assert_null (_pps_signature_signing_data_from_variant (malformed, &error));
+		g_assert_error (error, G_IO_ERROR, G_IO_ERROR_INVALID_DATA);
+		g_clear_error (&error);
+	}
+	const char *required[] = { "page", "rect", "font-size", "left-font-size", "border-width", "font-color", "border-color", "background-color" };
+	for (guint i = 0; i < G_N_ELEMENTS (required); i++) {
+		GVariantDict dict;
+		g_variant_dict_init (&dict, value);
+		g_variant_dict_remove (&dict, required[i]);
+		g_autoptr (GVariant) malformed = g_variant_ref_sink (g_variant_dict_end (&dict));
+		g_assert_null (_pps_signature_signing_data_from_variant (malformed, &error));
+		g_assert_error (error, G_IO_ERROR, G_IO_ERROR_INVALID_DATA);
+		g_clear_error (&error);
+	}
+}
+
 int
 main (int argc, char **argv)
 {
@@ -124,5 +234,7 @@ main (int argc, char **argv)
 	g_test_add_func ("/document-signature/signature-roundtrip", signature_roundtrip);
 	g_test_add_func ("/document-signature/nullable-properties", nullable_properties);
 	g_test_add_func ("/document-signature/invalid-information", invalid_information);
+	g_test_add_func ("/document-signature/signing-data-roundtrip", signing_data_roundtrip);
+	g_test_add_func ("/document-signature/invalid-signing-data", invalid_signing_data);
 	return g_test_run ();
 }

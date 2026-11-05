@@ -13,3 +13,9 @@ PPS_PRIVATE
 GVariant *_pps_signature_info_to_variant (PpsSignature *signature);
 PPS_PRIVATE
 PpsSignature *_pps_signature_info_from_variant (GVariant *value, GError **error);
+
+/* The destination is supplied separately as an output descriptor. */
+PPS_PRIVATE
+GVariant *_pps_signature_signing_data_to_variant (PpsSignature *signature);
+PPS_PRIVATE
+PpsSignature *_pps_signature_signing_data_from_variant (GVariant *value, GError **error);

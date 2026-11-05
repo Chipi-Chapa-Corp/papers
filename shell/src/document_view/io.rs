@@ -11,6 +11,22 @@ use cairo as cairo_rs;
 // Constants for manual signature placement
 const SIGNATURE_MARGIN: f64 = 50.0;
 
+fn find_document_view(widget: &gtk::Widget, document: &Document) -> Option<PpsDocumentView> {
+    if let Some(view) = widget.downcast_ref::<PpsDocumentView>()
+        && view.model().document().as_ref() == Some(document)
+    {
+        return Some(view.clone());
+    }
+    let mut child = widget.first_child();
+    while let Some(widget) = child {
+        if let Some(view) = find_document_view(&widget, document) {
+            return Some(view);
+        }
+        child = widget.next_sibling();
+    }
+    None
+}
+
 impl imp::PpsDocumentView {
     pub(crate) fn message_area(&self) -> Option<PpsProgressMessageArea> {
         self.message_area.borrow().clone()
@@ -307,13 +323,25 @@ impl imp::PpsDocumentView {
         self.setup_sidebar();
 
         // Set password callback
-        if let Some(document) = document.dynamic_cast_ref::<DocumentSignatures>() {
-            document.set_password_callback(glib::clone!(
-                #[weak(rename_to = obj)]
-                self,
-                #[upgrade_or_default]
-                move |name| obj.on_signature_password(name)
-            ));
+        if let Some(signatures) = document.dynamic_cast_ref::<DocumentSignatures>() {
+            let weak_document = document.downgrade();
+            let weak_view = self.obj().downgrade();
+            signatures.set_password_callback(move |name| {
+                let document = weak_document.upgrade()?;
+                let view = weak_view
+                    .upgrade()
+                    .filter(|view| {
+                        view.is_mapped() && view.model().document().as_ref() == Some(&document)
+                    })
+                    .or_else(|| {
+                        gtk::Window::toplevels()
+                            .iter::<gtk::Window>()
+                            .flatten()
+                            .filter(|window| window.is_visible())
+                            .find_map(|window| find_document_view(window.upcast_ref(), &document))
+                    })?;
+                view.imp().on_signature_password(name)
+            });
         }
 
         self.update_title();
@@ -355,8 +383,8 @@ impl imp::PpsDocumentView {
             .unwrap_or(default_dir)
     }
 
-    pub(super) fn parent_window(&self) -> gtk::Window {
-        self.obj().native().and_downcast::<gtk::Window>().unwrap()
+    pub(super) fn parent_window(&self) -> Option<gtk::Window> {
+        self.obj().root().and_downcast::<gtk::Window>()
     }
 
     pub(super) fn save_as(&self) {
@@ -373,7 +401,11 @@ impl imp::PpsDocumentView {
             #[weak(rename_to = obj)]
             self,
             async move {
-                let result = dialog.save_future(Some(&obj.parent_window())).await;
+                let Some(parent) = obj.parent_window() else {
+                    obj.finish_close(false);
+                    return;
+                };
+                let result = dialog.save_future(Some(&parent)).await;
 
                 match result {
                     Err(_) => obj.finish_close(false),
@@ -828,7 +860,11 @@ impl imp::PpsDocumentView {
             #[weak(rename_to = obj)]
             self,
             async move {
-                let result = dialog.save_future(Some(&obj.parent_window())).await;
+                let Some(parent) = obj.parent_window() else {
+                    obj.certificate_info.take();
+                    return;
+                };
+                let result = dialog.save_future(Some(&parent)).await;
 
                 match result {
                     Ok(file) => obj.certificate_save_file(file.path().unwrap()),
@@ -846,6 +882,8 @@ impl imp::PpsDocumentView {
 
     fn on_signature_password(&self, name: &str) -> Option<String> {
         use std::sync::{Arc, Mutex};
+
+        let parent = self.parent_window()?;
 
         let password: Arc<Mutex<Option<String>>> = Arc::new(Mutex::new(None));
 
@@ -895,7 +933,7 @@ impl imp::PpsDocumentView {
             ),
         );
 
-        dialog.present(Some(&self.parent_window()));
+        dialog.present(Some(&parent));
         entry.grab_focus();
         lp.run();
 

@@ -134,7 +134,9 @@ impl imp::PpsDocumentView {
     }
 
     pub(super) fn print_range(&self, first_page: i32, last_page: i32) {
-        let document = self.document().unwrap();
+        let (Some(document), Some(parent)) = (self.document(), self.parent_window()) else {
+            return;
+        };
 
         let Some(operation) = papers_view::PrintOperation::new(&document) else {
             glib::g_warning!("", "Printing is not supported for document");
@@ -190,7 +192,7 @@ impl imp::PpsDocumentView {
             .to_string();
         print_settings.set(gtk::PRINT_SETTINGS_OUTPUT_BASENAME, Some(&output_basename));
 
-        operation.set_job_name(&self.parent_window().title().unwrap_or_default());
+        operation.set_job_name(&self.obj().title());
         operation.set_current_page(current_page);
         operation.set_print_settings(&print_settings);
         operation.set_default_page_setup(&page_setup);
@@ -205,7 +207,7 @@ impl imp::PpsDocumentView {
 
         self.print_queue.borrow_mut().push_back(operation.clone());
 
-        operation.run(&self.parent_window());
+        operation.run(&parent);
     }
 
     fn print_settings_filename(&self, create: bool) -> PathBuf {

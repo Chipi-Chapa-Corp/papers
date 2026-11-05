@@ -594,11 +594,12 @@ mod imp {
             }
 
             // Fullscreen
-            if let Some(fullscreen) = metadata.boolean("fullscreen") {
-                self.parent_window()
-                    .dynamic_cast::<gio::ActionGroup>()
-                    .unwrap()
-                    .change_action_state("fullscreen", &fullscreen.into());
+            if let Some(fullscreen) = metadata.boolean("fullscreen")
+                && let Some(window) = self
+                    .parent_window()
+                    .and_then(|window| window.dynamic_cast::<gio::ActionGroup>().ok())
+            {
+                window.change_action_state("fullscreen", &fullscreen.into());
             }
 
             // Dual page

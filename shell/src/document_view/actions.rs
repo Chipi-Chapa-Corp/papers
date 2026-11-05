@@ -754,16 +754,15 @@ impl imp::PpsDocumentView {
                     #[weak(rename_to = obj)]
                     self,
                     move |_, _, _| {
+                        let Some(parent) = obj.parent_window() else {
+                            return;
+                        };
                         if let Some(file) = obj.file.borrow().clone() {
                             let launcher = gtk::FileLauncher::new(Some(&file));
 
                             launcher.set_always_ask(true);
 
-                            launcher.launch(
-                                Some(&obj.parent_window()),
-                                gio::Cancellable::NONE,
-                                |_| {},
-                            );
+                            launcher.launch(Some(&parent), gio::Cancellable::NONE, |_| {});
                         };
                     }
                 ))
@@ -909,11 +908,10 @@ impl imp::PpsDocumentView {
             && self.find_sidebar.focus_child().is_some()
         {
             WidgetExt::activate_action(self.obj().as_ref(), "doc.toggle-find", None).unwrap();
-        } else if self.parent_window().is_fullscreen() {
-            self.parent_window()
-                .dynamic_cast::<gio::ActionGroup>()
-                .unwrap()
-                .change_action_state("fullscreen", &false.into());
+        } else if let Some(window) = self.parent_window().filter(|window| window.is_fullscreen()) {
+            if let Some(actions) = window.dynamic_cast_ref::<gio::ActionGroup>() {
+                actions.change_action_state("fullscreen", &false.into());
+            }
         } else if self.split_view.is_collapsed() && self.split_view.shows_sidebar() {
             self.split_view.set_show_sidebar(false);
         } else if self.model.annotation_editing_state() != papers_view::AnnotationEditingState::NONE
@@ -1041,7 +1039,10 @@ impl imp::PpsDocumentView {
             #[weak(rename_to = obj)]
             self,
             async move {
-                let Ok(file) = dialog.save_future(Some(&obj.parent_window())).await else {
+                let Some(parent) = obj.parent_window() else {
+                    return;
+                };
+                let Ok(file) = dialog.save_future(Some(&parent)).await else {
                     return;
                 };
 
@@ -1462,7 +1463,9 @@ impl imp::PpsDocumentView {
 
         self.file_dialog_restore_folder(&dialog, UserDirectory::Documents);
 
-        let window = self.parent_window();
+        let Some(window) = self.parent_window() else {
+            return;
+        };
 
         glib::spawn_future_local(glib::clone!(
             #[weak(rename_to = obj)]

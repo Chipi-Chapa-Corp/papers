@@ -276,6 +276,8 @@ static void
 dispose (GObject *object)
 {
 	PpsDocumentProxyPrivate *priv = get_private (object);
+	if (PPS_IS_DOCUMENT_SIGNATURES (object))
+		pps_document_signatures_set_password_callback (PPS_DOCUMENT_SIGNATURES (object), NULL, NULL);
 	if (priv->closed_handler) {
 		g_signal_handler_disconnect (priv->session->connection, priv->closed_handler);
 		priv->closed_handler = 0;
@@ -350,6 +352,7 @@ _pps_document_proxy_type_for_interfaces (const char *const *interfaces, guint an
 		{ PPS_TYPE_DOCUMENT_TRANSITION, (GInterfaceInitFunc) _pps_document_proxy_transition_iface_init },
 		{ PPS_TYPE_DOCUMENT_MEDIA, (GInterfaceInitFunc) _pps_document_proxy_media_iface_init },
 		{ PPS_TYPE_FILE_EXPORTER, (GInterfaceInitFunc) _pps_document_proxy_exporter_iface_init },
+		{ PPS_TYPE_DOCUMENT_SIGNATURES, (GInterfaceInitFunc) _pps_document_proxy_signatures_iface_init },
 	};
 	for (guint i = 0; i < G_N_ELEMENTS (capabilities); i++) {
 		if (g_strv_contains (interfaces, g_type_name (capabilities[i].type)))

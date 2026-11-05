@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
-#include <cairo-pdf.h>
 #include <fcntl.h>
 #include <glib/gstdio.h>
 #include <unistd.h>
 
 #include "pps-document-factory-private.h"
+#include "pps-document-proxy-private.h"
 #include "pps-document-session-private.h"
 #include "pps-document-signature-private.h"
 #include "pps-document-signatures.h"
@@ -25,16 +25,22 @@ password_callback (const char *name, gpointer data)
 }
 
 static PpsDocument *
-open_document (const char *path)
+open_document_full (const char *path, gboolean proxy)
 {
 	g_autoptr (GError) error = NULL;
 	g_autofree char *uri = g_filename_to_uri (path, NULL, NULL);
-	PpsDocument *document = _pps_document_factory_create_document ("application/pdf", &error);
+	PpsDocument *document = proxy ? _pps_document_proxy_new ("application/pdf", NULL, &error) : _pps_document_factory_create_document ("application/pdf", &error);
 	g_assert_no_error (error);
 	g_assert_true (pps_document_load (document, uri, &error));
 	g_assert_no_error (error);
 	pps_document_setup_cache (document);
 	return document;
+}
+
+static PpsDocument *
+open_document (const char *path)
+{
+	return open_document_full (path, FALSE);
 }
 
 typedef struct {
@@ -112,6 +118,7 @@ create_signed_pdf (const char *name)
 	g_autoptr (GError) error = NULL;
 	g_assert_true (sign_document (document, signature, NULL, &error));
 	g_assert_no_error (error);
+	g_assert_false (pps_document_signatures_has_signatures (PPS_DOCUMENT_SIGNATURES (document)));
 	pps_document_signatures_set_password_callback (PPS_DOCUMENT_SIGNATURES (document), NULL, NULL);
 	return path;
 }
@@ -222,13 +229,13 @@ worker_unsigned (void)
 }
 
 static void
-signing_errors (void)
+signing_errors (gconstpointer data)
 {
 	if (!certutil) {
 		g_test_skip ("certutil is needed to create a temporary signing certificate");
 		return;
 	}
-	g_autoptr (PpsDocument) document = open_document (source_path);
+	g_autoptr (PpsDocument) document = open_document_full (source_path, GPOINTER_TO_INT (data));
 	guint requests = 0;
 	g_autoptr (PpsCertificateInfo) certificate = get_certificate (document, &requests);
 	g_autofree char *path = g_build_filename (fixture_dir, "missing-directory", "signed.pdf", NULL);
@@ -241,6 +248,21 @@ signing_errors (void)
 	g_cancellable_cancel (cancellable);
 	g_assert_false (sign_document (document, signature, cancellable, &error));
 	g_assert_error (error, G_IO_ERROR, G_IO_ERROR_CANCELLED);
+	g_clear_error (&error);
+	if (GPOINTER_TO_INT (data)) {
+		g_autofree char *existing = g_build_filename (fixture_dir, "existing-output.pdf", NULL);
+		g_assert_true (g_file_set_contents (existing, "Original contents", -1, &error));
+		g_assert_no_error (error);
+		g_autoptr (PpsCertificateInfo) missing = g_object_new (PPS_TYPE_CERTIFICATE_INFO, "id", "missing-certificate", NULL);
+		g_autoptr (PpsSignature) invalid = new_signature (missing, existing);
+		g_assert_false (sign_document (document, invalid, NULL, &error));
+		g_assert_error (error, G_IO_ERROR, G_IO_ERROR_NOT_FOUND);
+		g_clear_error (&error);
+		g_autofree char *contents = NULL;
+		g_assert_true (g_file_get_contents (existing, &contents, NULL, &error));
+		g_assert_no_error (error);
+		g_assert_cmpstr (contents, ==, "Original contents");
+	}
 	pps_document_signatures_set_password_callback (PPS_DOCUMENT_SIGNATURES (document), NULL, NULL);
 }
 
@@ -412,7 +434,7 @@ worker_sign (gconstpointer data)
 	g_assert_true (g_cancellable_make_pollfd (cancellable, &pollfd));
 	int cancel_handle = g_unix_fd_list_append (descriptors, pollfd.fd, &error);
 	g_assert_no_error (error);
-	g_autoptr (GVariant) result = call_worker (session, "Sign", g_variant_new ("(hh@a{sv})", output_handle, cancel_handle, g_variant_ref (options)), descriptors, &error);
+	g_autoptr (GVariant) result = call_worker (session, "Sign", g_variant_new ("(hh@a{sv})", output_handle, cancel_handle, options), descriptors, &error);
 	g_assert_cmpuint (state.requests, >, 0);
 	if (cancel) {
 		g_assert_null (result);
@@ -468,7 +490,7 @@ worker_signing_inputs (void)
 	close (pipes[1]);
 	const int handles[][2] = { { -1, 1 }, { 0, -1 }, { 9, 1 }, { 0, 9 }, { 2, 1 }, { 3, 1 }, { 1, 0 } };
 	for (guint i = 0; i < G_N_ELEMENTS (handles); i++) {
-		g_assert_null (call_worker (session, "Sign", g_variant_new ("(hh@a{sv})", handles[i][0], handles[i][1], g_variant_ref (options)), descriptors, &error));
+		g_assert_null (call_worker (session, "Sign", g_variant_new ("(hh@a{sv})", handles[i][0], handles[i][1], options), descriptors, &error));
 		g_assert_error (error, G_IO_ERROR, G_IO_ERROR_INVALID_ARGUMENT);
 		g_clear_error (&error);
 	}
@@ -482,11 +504,11 @@ worker_signing_inputs (void)
 	g_assert_error (error, G_IO_ERROR, G_IO_ERROR_INVALID_DATA);
 	g_clear_error (&error);
 	/* Missing certificate data reaches a checked native error, never an assert. */
-	g_assert_null (call_worker (session, "Sign", g_variant_new ("(hh@a{sv})", 0, 1, g_variant_ref (options)), descriptors, &error));
+	g_assert_null (call_worker (session, "Sign", g_variant_new ("(hh@a{sv})", 0, 1, options), descriptors, &error));
 	g_assert_error (error, G_IO_ERROR, G_IO_ERROR_INVALID_ARGUMENT);
 	g_clear_error (&error);
 	g_cancellable_cancel (cancellable);
-	g_assert_null (call_worker (session, "Sign", g_variant_new ("(hh@a{sv})", 0, 1, g_variant_ref (options)), descriptors, &error));
+	g_assert_null (call_worker (session, "Sign", g_variant_new ("(hh@a{sv})", 0, 1, options), descriptors, &error));
 	g_assert_error (error, G_IO_ERROR, G_IO_ERROR_CANCELLED);
 	g_clear_error (&error);
 	g_assert_cmpint (lseek (fd, 0, SEEK_END), ==, 0);
@@ -495,6 +517,252 @@ worker_signing_inputs (void)
 	g_assert_nonnull (result);
 	g_cancellable_release_fd (cancellable);
 	close (fd);
+}
+
+typedef struct {
+	GThread *thread;
+	guint requests;
+	gboolean reject;
+	gboolean wrong_once;
+	GCancellable *cancel;
+} ProxyPassword;
+
+static char *
+proxy_password (const char *name, gpointer data)
+{
+	ProxyPassword *state = data;
+	g_assert_true (g_thread_self () == state->thread);
+	g_assert_nonnull (name);
+	state->requests++;
+	if (state->cancel)
+		g_cancellable_cancel (state->cancel);
+	if (state->wrong_once && state->requests == 1)
+		return g_strdup ("wrong password");
+	return state->reject ? NULL : g_strdup ("papers-test-password");
+}
+
+static PpsCertificateInfo *
+proxy_certificate (PpsDocument *document, ProxyPassword *state)
+{
+	pps_document_signatures_set_password_callback (PPS_DOCUMENT_SIGNATURES (document), proxy_password, state);
+	g_autolist (PpsCertificateInfo) certificates = pps_document_signatures_get_available_signing_certificates (PPS_DOCUMENT_SIGNATURES (document));
+	g_assert_cmpuint (g_list_length (certificates), ==, 1);
+	g_autofree char *id = NULL;
+	g_object_get (certificates->data, "id", &id, NULL);
+	g_assert_nonnull (id);
+	PpsCertificateInfo *certificate = pps_document_signatures_get_certificate_info (PPS_DOCUMENT_SIGNATURES (document), id);
+	g_assert_nonnull (certificate);
+	g_assert_null (pps_document_signatures_get_certificate_info (PPS_DOCUMENT_SIGNATURES (document), "missing-certificate"));
+	return certificate;
+}
+
+static void
+proxy_sign_and_verify (void)
+{
+	if (!certutil) {
+		g_test_skip ("certutil is needed to create a temporary signing certificate");
+		return;
+	}
+	/* Start without native oracle types to verify that signing, validation, and
+	 * rendering keep the document parser out of the caller. */
+	if (!g_test_subprocess ()) {
+		g_test_trap_subprocess (NULL, 15 * G_USEC_PER_SEC, 0);
+		g_test_trap_assert_passed ();
+		return;
+	}
+	g_assert_cmpuint (g_type_from_name ("PdfDocument"), ==, G_TYPE_INVALID);
+	g_autoptr (PpsDocument) document = open_document_full (source_path, TRUE);
+	g_assert_true (PPS_IS_DOCUMENT_SIGNATURES (document));
+	g_assert_true (pps_document_signatures_can_sign (PPS_DOCUMENT_SIGNATURES (document)));
+	g_assert_false (pps_document_signatures_has_signatures (PPS_DOCUMENT_SIGNATURES (document)));
+	ProxyPassword state = { .thread = g_thread_self () };
+	g_autoptr (PpsCertificateInfo) certificate = proxy_certificate (document, &state);
+	g_assert_cmpuint (state.requests, >, 0);
+	g_autofree char *path = g_build_filename (fixture_dir, "proxy-signed.pdf", NULL);
+	g_autofree char *old_contents = g_malloc0 (1024 * 1024);
+	g_autoptr (GError) error = NULL;
+	g_assert_true (g_file_set_contents (path, old_contents, 1024 * 1024, &error));
+	g_assert_no_error (error);
+	g_autoptr (PpsSignature) signature = new_signature (certificate, path);
+	GdkRGBA font = { 0, 0, 1, 1 }, border = { 1, 0, 0, 1 }, background = { 0, 1, 0, 1 };
+	pps_signature_set_font_color (signature, &font);
+	pps_signature_set_border_color (signature, &border);
+	pps_signature_set_background_color (signature, &background);
+	pps_signature_set_font_size (signature, 14);
+	pps_signature_set_left_font_size (signature, 24);
+	pps_signature_set_border_width (signature, 2);
+	g_assert_true (sign_document (document, signature, NULL, &error));
+	g_assert_no_error (error);
+	GStatBuf statbuf;
+	g_assert_cmpint (g_stat (path, &statbuf), ==, 0);
+	g_assert_cmpint (statbuf.st_size, <, 1024 * 1024);
+	g_assert_false (pps_document_signatures_has_signatures (PPS_DOCUMENT_SIGNATURES (document)));
+	g_autoptr (PpsDocument) signed_document = open_document_full (path, TRUE);
+	g_assert_true (pps_document_signatures_has_signatures (PPS_DOCUMENT_SIGNATURES (signed_document)));
+	g_autolist (PpsSignature) signatures = pps_document_signatures_get_signatures (PPS_DOCUMENT_SIGNATURES (signed_document));
+	g_assert_cmpuint (g_list_length (signatures), ==, 1);
+	g_assert_true (pps_signature_is_valid (signatures->data));
+	g_autoptr (PpsPage) page = pps_document_get_page (signed_document, 0);
+	g_autofree char *text = pps_document_text_get_text (PPS_DOCUMENT_TEXT (signed_document), page);
+	g_assert_nonnull (text);
+	g_assert_nonnull (strstr (text, "Signature fixture"));
+	g_autoptr (PpsRenderContext) context = pps_render_context_new (page, 0, 1, PPS_RENDER_ANNOTS_ALL);
+	cairo_surface_t *surface = pps_document_render (signed_document, context);
+	g_assert_nonnull (surface);
+	guint red = 0, green = 0, blue = 0;
+	for (int y = 0; y < cairo_image_surface_get_height (surface); y++) {
+		const guint32 *pixels = (const guint32 *) (cairo_image_surface_get_data (surface) + y * cairo_image_surface_get_stride (surface));
+		for (int x = 0; x < cairo_image_surface_get_width (surface); x++) {
+			guint32 rgb = pixels[x] & 0xffffff;
+			red += rgb == 0xff0000;
+			green += rgb == 0x00ff00;
+			blue += rgb == 0x0000ff;
+		}
+	}
+	cairo_surface_destroy (surface);
+	g_assert_cmpuint (red, >, 100);
+	g_assert_cmpuint (green, >, 1000);
+	g_assert_cmpuint (blue, >, 10);
+	g_clear_object (&document);
+	g_clear_object (&signed_document);
+	g_assert_true (pps_signature_is_valid (signatures->data));
+	g_assert_cmpuint (g_type_from_name ("PdfDocument"), ==, G_TYPE_INVALID);
+}
+
+static void
+proxy_certificate_callbacks (void)
+{
+	if (!certutil) {
+		g_test_skip ("certutil is needed to create a temporary signing certificate");
+		return;
+	}
+	g_autoptr (PpsDocument) document = open_document_full (source_path, TRUE);
+	g_assert_null (pps_document_signatures_get_available_signing_certificates (PPS_DOCUMENT_SIGNATURES (document)));
+	ProxyPassword denied = { .thread = g_thread_self (), .reject = TRUE };
+	pps_document_signatures_set_password_callback (PPS_DOCUMENT_SIGNATURES (document), proxy_password, &denied);
+	g_assert_null (pps_document_signatures_get_available_signing_certificates (PPS_DOCUMENT_SIGNATURES (document)));
+	g_assert_cmpuint (denied.requests, >, 0);
+	guint previous = denied.requests;
+	ProxyPassword accepted = { .thread = g_thread_self (), .wrong_once = TRUE };
+	pps_document_signatures_set_password_callback (PPS_DOCUMENT_SIGNATURES (document), proxy_password, &accepted);
+	g_autolist (PpsCertificateInfo) first_attempt = pps_document_signatures_get_available_signing_certificates (PPS_DOCUMENT_SIGNATURES (document));
+	g_autoptr (PpsCertificateInfo) certificate = proxy_certificate (document, &accepted);
+	g_assert_cmpuint (accepted.requests, >=, 2);
+	g_assert_cmpuint (denied.requests, ==, previous);
+	GWeakRef weak;
+	g_weak_ref_init (&weak, document);
+	g_clear_object (&document);
+	g_assert_null (g_weak_ref_get (&weak));
+	g_weak_ref_clear (&weak);
+}
+
+typedef struct {
+	PpsDocument *document;
+	GMainLoop *loop;
+	GList *certificates;
+} BackgroundCertificates;
+
+static gboolean
+quit_loop (gpointer data)
+{
+	g_main_loop_quit (data);
+	return G_SOURCE_REMOVE;
+}
+
+static gpointer
+load_certificates (gpointer data)
+{
+	BackgroundCertificates *state = data;
+	state->certificates = pps_document_signatures_get_available_signing_certificates (PPS_DOCUMENT_SIGNATURES (state->document));
+	g_idle_add (quit_loop, state->loop);
+	return NULL;
+}
+
+static void
+proxy_background_certificates (void)
+{
+	if (!certutil) {
+		g_test_skip ("certutil is needed to create a temporary signing certificate");
+		return;
+	}
+	g_autoptr (PpsDocument) document = open_document_full (source_path, TRUE);
+	ProxyPassword password = { .thread = g_thread_self () };
+	pps_document_signatures_set_password_callback (PPS_DOCUMENT_SIGNATURES (document), proxy_password, &password);
+	g_autoptr (GMainLoop) loop = g_main_loop_new (NULL, FALSE);
+	BackgroundCertificates state = { document, loop, NULL };
+	guint timeout = g_timeout_add_seconds (10, sign_timed_out, NULL);
+	GThread *thread = g_thread_new ("signing-certificates", load_certificates, &state);
+	g_main_loop_run (loop);
+	g_thread_join (thread);
+	g_source_remove (timeout);
+	g_assert_cmpuint (password.requests, >, 0);
+	g_assert_cmpuint (g_list_length (state.certificates), ==, 1);
+	g_list_free_full (state.certificates, g_object_unref);
+}
+
+static void
+proxy_cancel_sign (void)
+{
+	if (!certutil) {
+		g_test_skip ("certutil is needed to create a temporary signing certificate");
+		return;
+	}
+	g_autoptr (PpsDocument) selector = open_document_full (source_path, TRUE);
+	ProxyPassword selection = { .thread = g_thread_self () };
+	g_autoptr (PpsCertificateInfo) certificate = proxy_certificate (selector, &selection);
+	guint selection_requests = selection.requests;
+	g_autoptr (PpsDocument) document = open_document_full (source_path, TRUE);
+	g_autoptr (GCancellable) cancellable = g_cancellable_new ();
+	ProxyPassword password = { .thread = g_thread_self (), .cancel = cancellable };
+	pps_document_signatures_set_password_callback (PPS_DOCUMENT_SIGNATURES (document), proxy_password, &password);
+	g_autofree char *path = g_build_filename (fixture_dir, "proxy-cancelled.pdf", NULL);
+	g_autoptr (PpsSignature) signature = new_signature (certificate, path);
+	g_autoptr (GError) error = NULL;
+	g_assert_false (sign_document (document, signature, cancellable, &error));
+	g_assert_error (error, G_IO_ERROR, G_IO_ERROR_CANCELLED);
+	g_assert_cmpuint (password.requests, >, 0);
+	g_assert_cmpuint (selection.requests, ==, selection_requests);
+	g_clear_error (&error);
+	password.cancel = NULL;
+	g_cancellable_reset (cancellable);
+	g_assert_true (sign_document (document, signature, cancellable, &error));
+	g_assert_no_error (error);
+	g_autoptr (PpsDocument) signed_document = open_document_full (path, TRUE);
+	g_autolist (PpsSignature) signatures = pps_document_signatures_get_signatures (PPS_DOCUMENT_SIGNATURES (signed_document));
+	g_assert_cmpuint (g_list_length (signatures), ==, 1);
+	g_assert_true (pps_signature_is_valid (signatures->data));
+}
+
+static void
+proxy_worker_failure (void)
+{
+	if (!certutil) {
+		g_test_skip ("certutil is needed to create a temporary signing certificate");
+		return;
+	}
+	g_autoptr (PpsDocument) document = open_document_full (source_path, TRUE);
+	ProxyPassword password = { .thread = g_thread_self () };
+	g_autoptr (PpsCertificateInfo) certificate = proxy_certificate (document, &password);
+	PpsDocumentSession *session = _pps_document_proxy_get_session (document);
+	g_subprocess_force_exit (session->process);
+	g_assert_true (g_subprocess_wait (session->process, NULL, NULL));
+	g_autofree char *path = g_build_filename (fixture_dir, "failed-worker.pdf", NULL);
+	g_autoptr (PpsSignature) signature = new_signature (certificate, path);
+	g_autoptr (GError) error = NULL;
+	g_assert_false (sign_document (document, signature, NULL, &error));
+	g_assert_nonnull (error);
+	g_clear_error (&error);
+	g_autoptr (PpsDocument) other = open_document_full (source_path, TRUE);
+	ProxyPassword other_password = { .thread = g_thread_self () };
+	pps_document_signatures_set_password_callback (PPS_DOCUMENT_SIGNATURES (other), proxy_password, &other_password);
+	g_autofree char *other_path = g_build_filename (fixture_dir, "other-worker.pdf", NULL);
+	pps_signature_set_destination_file (signature, other_path);
+	g_assert_true (sign_document (other, signature, NULL, &error));
+	g_assert_no_error (error);
+	g_autoptr (PpsDocument) signed_document = open_document_full (other_path, TRUE);
+	g_autolist (PpsSignature) signatures = pps_document_signatures_get_signatures (PPS_DOCUMENT_SIGNATURES (signed_document));
+	g_assert_cmpuint (g_list_length (signatures), ==, 1);
+	g_assert_true (pps_signature_is_valid (signatures->data));
 }
 
 static void
@@ -520,13 +788,27 @@ create_fixtures (void)
 	g_setenv ("XDG_CONFIG_HOME", fixture_dir, TRUE);
 	g_setenv ("POPPLER_SIGNATURE_BACKEND", "NSS", TRUE);
 	source_path = g_build_filename (fixture_dir, "source.pdf", NULL);
-	cairo_surface_t *surface = cairo_pdf_surface_create (source_path, 200, 200);
-	cairo_t *cr = cairo_create (surface);
-	cairo_move_to (cr, 20, 120);
-	cairo_show_text (cr, "Signature fixture");
-	cairo_show_page (cr);
-	cairo_destroy (cr);
-	cairo_surface_destroy (surface);
+	/* A vector fixture needs no font initialization in the proxy's caller. */
+	const char *objects[] = {
+		"<< /Type /Catalog /Pages 2 0 R >>",
+		"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+		"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 200] /Resources << /Font << /F1 5 0 R >> >> /Contents 4 0 R >>",
+		"<< /Length 48 >>\nstream\nBT /F1 12 Tf 20 80 Td (Signature fixture) Tj ET\nendstream",
+		"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+	};
+	g_autoptr (GString) pdf = g_string_new ("%PDF-1.7\n");
+	gsize offsets[G_N_ELEMENTS (objects)];
+	for (guint i = 0; i < G_N_ELEMENTS (objects); i++) {
+		offsets[i] = pdf->len;
+		g_string_append_printf (pdf, "%u 0 obj\n%s\nendobj\n", i + 1, objects[i]);
+	}
+	gsize xref = pdf->len;
+	g_string_append_printf (pdf, "xref\n0 %u\n0000000000 65535 f \n", (guint) G_N_ELEMENTS (objects) + 1);
+	for (guint i = 0; i < G_N_ELEMENTS (objects); i++)
+		g_string_append_printf (pdf, "%010" G_GSIZE_FORMAT " 00000 n \n", offsets[i]);
+	g_string_append_printf (pdf, "trailer\n<< /Size %u /Root 1 0 R >>\nstartxref\n%" G_GSIZE_FORMAT "\n%%%%EOF\n", (guint) G_N_ELEMENTS (objects) + 1, xref);
+	g_assert_true (g_file_set_contents (source_path, pdf->str, pdf->len, &error));
+	g_assert_no_error (error);
 	certutil = g_find_program_in_path ("certutil");
 	if (!certutil)
 		return;
@@ -573,7 +855,7 @@ main (int argc, char **argv)
 	create_fixtures ();
 	pps_init ();
 	g_test_add_func ("/document-signatures/sign-and-verify", sign_and_verify);
-	g_test_add_func ("/document-signatures/errors", signing_errors);
+	g_test_add_data_func ("/document-signatures/errors", GINT_TO_POINTER (FALSE), signing_errors);
 	g_test_add_func ("/document-signatures/invalid-inputs", invalid_signing_inputs);
 	g_test_add_func ("/document-signatures/worker-signed-and-tampered", worker_signatures);
 	g_test_add_func ("/document-signatures/worker-unsigned", worker_unsigned);
@@ -581,6 +863,12 @@ main (int argc, char **argv)
 	g_test_add_data_func ("/document-signatures/worker-sign", GINT_TO_POINTER (FALSE), worker_sign);
 	g_test_add_data_func ("/document-signatures/worker-cancel-sign", GINT_TO_POINTER (TRUE), worker_sign);
 	g_test_add_func ("/document-signatures/worker-signing-inputs", worker_signing_inputs);
+	g_test_add_func ("/document-signatures/proxy-sign-and-verify", proxy_sign_and_verify);
+	g_test_add_func ("/document-signatures/proxy-certificate-callbacks", proxy_certificate_callbacks);
+	g_test_add_func ("/document-signatures/proxy-background-certificates", proxy_background_certificates);
+	g_test_add_func ("/document-signatures/proxy-cancel-sign", proxy_cancel_sign);
+	g_test_add_data_func ("/document-signatures/proxy-errors", GINT_TO_POINTER (TRUE), signing_errors);
+	g_test_add_func ("/document-signatures/proxy-worker-failure", proxy_worker_failure);
 	int result = g_test_run ();
 	pps_shutdown ();
 	remove_fixture (fixture_dir);

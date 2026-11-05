@@ -13,6 +13,7 @@
 #include "pps-document-media.h"
 #include "pps-document-objects-private.h"
 #include "pps-document-session-private.h"
+#include "pps-document-signatures.h"
 #include "pps-document-state-private.h"
 #include "pps-document-text.h"
 #include "pps-document-transition.h"
@@ -59,3 +60,4 @@ void _pps_document_proxy_images_iface_init (PpsDocumentImagesInterface *iface);
 void _pps_document_proxy_transition_iface_init (PpsDocumentTransitionInterface *iface);
 void _pps_document_proxy_media_iface_init (PpsDocumentMediaInterface *iface);
 void _pps_document_proxy_exporter_iface_init (PpsFileExporterInterface *iface);
+void _pps_document_proxy_signatures_iface_init (PpsDocumentSignaturesInterface *iface);

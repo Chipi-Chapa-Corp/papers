@@ -72,6 +72,8 @@ metadata_and_rendering (void)
 	g_subprocess_send_signal (session->process, SIGSTOP);
 	g_assert_cmpint (waitid (P_PID, pid, &status, WSTOPPED | WNOWAIT), ==, 0);
 	/* All layout and document properties remain local, even with a stopped worker. */
+	g_assert_true (pps_document_signatures_can_sign (PPS_DOCUMENT_SIGNATURES (document)));
+	g_assert_false (pps_document_signatures_has_signatures (PPS_DOCUMENT_SIGNATURES (document)));
 	g_assert_true ((pps_file_exporter_get_capabilities (PPS_FILE_EXPORTER (document)) & PPS_FILE_EXPORTER_CAN_GENERATE_PS) != 0);
 	pps_document_get_page_size (document, 0, &width, &height);
 	g_assert_cmpfloat (width, ==, 144);

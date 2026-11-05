@@ -16,6 +16,7 @@
 
 #include <adwaita.h>
 
+#include "pps-file-exporter-private.h"
 #include "pps-job-scheduler.h"
 #include "pps-jobs.h"
 
@@ -368,6 +369,8 @@ static GType pps_print_operation_export_get_type (void);
 static void pps_print_operation_export_begin (PpsPrintOperationExport *export);
 static gboolean export_print_page (PpsPrintOperationExport *export);
 static void export_cancel (PpsPrintOperationExport *export);
+static void export_finish (PpsPrintOperationExport *export, GtkPrintOperationResult result);
+static gboolean export_check_error (PpsPrintOperationExport *export);
 
 struct _PpsPrintOperationExport {
 	PpsPrintOperation parent;
@@ -393,6 +396,7 @@ struct _PpsPrintOperationExport {
 	gboolean embed_page_setup;
 
 	guint idle_id;
+	gboolean exporting;
 
 	/* Context */
 	PpsFileExporterContext fc;
@@ -452,15 +456,6 @@ remove_document_queue (gpointer data,
 {
 	if (print_queue)
 		g_hash_table_remove (print_queue, document);
-}
-
-static gboolean
-pps_print_queue_is_empty (PpsDocument *document)
-{
-	GQueue *queue;
-
-	queue = g_hash_table_lookup (print_queue, document);
-	return (!queue || g_queue_is_empty (queue));
 }
 
 static void
@@ -927,6 +922,7 @@ static void
 export_print_page_idle_finished (PpsPrintOperationExport *export)
 {
 	export->idle_id = 0;
+	g_object_unref (export);
 }
 
 static void
@@ -934,6 +930,10 @@ export_job_finished (PpsJobExport *job,
                      PpsPrintOperationExport *export)
 {
 	PpsPrintOperation *op = PPS_PRINT_OPERATION (export);
+	if (!pps_job_is_succeeded (PPS_JOB (job), &export->error)) {
+		export_finish (export, GTK_PRINT_OPERATION_RESULT_ERROR);
+		return;
+	}
 
 	if (export->pages_per_sheet == 1 ||
 	    (export->page_count % export->pages_per_sheet == 0 &&
@@ -942,12 +942,14 @@ export_job_finished (PpsJobExport *job,
 	      (export->page_set == GTK_PAGE_SET_ODD && export->sheet % 2 == 1)))) {
 
 		pps_file_exporter_end_page (PPS_FILE_EXPORTER (op->document));
+		if (export_check_error (export))
+			return;
 	}
 
 	/* Reschedule */
 	export->idle_id = g_idle_add_full (G_PRIORITY_DEFAULT_IDLE,
 	                                   (GSourceFunc) export_print_page,
-	                                   export,
+	                                   g_object_ref (export),
 	                                   (GDestroyNotify) export_print_page_idle_finished);
 }
 
@@ -959,9 +961,14 @@ export_job_cancelled (PpsJobExport *job,
 }
 
 static void
-export_cancel (PpsPrintOperationExport *export)
+export_finish (PpsPrintOperationExport *export, GtkPrintOperationResult result)
 {
 	PpsPrintOperation *op = PPS_PRINT_OPERATION (export);
+	g_autoptr (GObject) hold = g_object_ref (G_OBJECT (export));
+	if (result == GTK_PRINT_OPERATION_RESULT_ERROR && export->exporting) {
+		pps_file_exporter_end (PPS_FILE_EXPORTER (op->document));
+		export->exporting = FALSE;
+	}
 
 	g_clear_handle_id (&export->idle_id, g_source_remove);
 
@@ -982,9 +989,25 @@ export_cancel (PpsPrintOperationExport *export)
 
 	pps_print_operation_export_clear_temp_file (export);
 
-	g_signal_emit (op, signals[DONE], 0, GTK_PRINT_OPERATION_RESULT_CANCEL);
+	g_signal_emit (op, signals[DONE], 0, result);
 
 	pps_print_operation_export_run_next (export);
+}
+
+static void
+export_cancel (PpsPrintOperationExport *export)
+{
+	export_finish (export, GTK_PRINT_OPERATION_RESULT_CANCEL);
+}
+
+static gboolean
+export_check_error (PpsPrintOperationExport *export)
+{
+	PpsDocument *document = PPS_PRINT_OPERATION (export)->document;
+	if (!_pps_file_exporter_get_error (PPS_FILE_EXPORTER (document), &export->error))
+		return FALSE;
+	export_finish (export, GTK_PRINT_OPERATION_RESULT_ERROR);
+	return TRUE;
 }
 
 static void
@@ -1018,6 +1041,9 @@ export_print_page (PpsPrintOperationExport *export)
 		export->collated = 0;
 		if (!export_print_inc_page (export)) {
 			pps_file_exporter_end (PPS_FILE_EXPORTER (op->document));
+			export->exporting = FALSE;
+			if (export_check_error (export))
+				return G_SOURCE_REMOVE;
 
 			update_progress (export);
 			export_print_done (export);
@@ -1041,6 +1067,9 @@ export_print_page (PpsPrintOperationExport *export)
 
 				if (!export_print_inc_page (export)) {
 					pps_file_exporter_end (PPS_FILE_EXPORTER (op->document));
+					export->exporting = FALSE;
+					if (export_check_error (export))
+						return G_SOURCE_REMOVE;
 
 					update_progress (export);
 
@@ -1058,6 +1087,8 @@ export_print_page (PpsPrintOperationExport *export)
 	      (export->page_set == GTK_PAGE_SET_EVEN && export->sheet % 2 == 0) ||
 	      (export->page_set == GTK_PAGE_SET_ODD && export->sheet % 2 == 1)))) {
 		pps_file_exporter_begin_page (PPS_FILE_EXPORTER (op->document));
+		if (export_check_error (export))
+			return G_SOURCE_REMOVE;
 	}
 
 	if (!export->job_export) {
@@ -1086,11 +1117,14 @@ pps_print_operation_export_begin (PpsPrintOperationExport *export)
 	if (!export->temp_file)
 		return; /* cancelled */
 
+	export->exporting = TRUE;
 	pps_file_exporter_begin (PPS_FILE_EXPORTER (op->document), &export->fc);
+	if (export_check_error (export))
+		return;
 
 	export->idle_id = g_idle_add_full (G_PRIORITY_DEFAULT_IDLE,
 	                                   (GSourceFunc) export_print_page,
-	                                   export,
+	                                   g_object_ref (export),
 	                                   (GDestroyNotify) export_print_page_idle_finished);
 }
 
@@ -1282,12 +1316,11 @@ pps_print_operation_export_prepare (PpsPrintOperationExport *export,
 	export->fc.duplex = FALSE;
 	export->fc.pages_per_sheet = export->pages_per_sheet;
 
-	if (pps_print_queue_is_empty (op->document))
-		pps_print_operation_export_begin (export);
-
 	pps_print_queue_push (op);
 
 	g_signal_emit (op, signals[BEGIN_PRINT], 0);
+	if (pps_print_queue_peek (op->document) == op)
+		pps_print_operation_export_begin (export);
 }
 
 static void
@@ -1407,6 +1440,7 @@ pps_print_operation_export_init (PpsPrintOperationExport *export)
 {
 	/* sheets are counted from 1 to be physical */
 	export->sheet = 1;
+	export->fd = -1;
 	export->dialog = gtk_print_dialog_new ();
 
 	/* translators: Title of the print dialog */
@@ -1875,7 +1909,7 @@ pps_print_operation_print_create_custom_widget (PpsPrintOperationPrint *print,
 	gtk_grid_attach (GTK_GRID (grid), label, 0, 0, 1, 1);
 
 	/* translators: Value for 'Page Scaling:' to not scale the document pages on printing */
-	print->scale_dropdown = gtk_drop_down_new_from_strings ((const char *[]) {
+	print->scale_dropdown = gtk_drop_down_new_from_strings ((const char *[]){
 	    _ ("None"),
 	    _ ("Shrink to Printable Area"),
 	    _ ("Fit to Printable Area"),

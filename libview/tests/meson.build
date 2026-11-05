@@ -33,3 +33,14 @@ proxy_export_test = executable(
 )
 
 test('pps-proxy-export-test', proxy_export_test, env: backend_env, depends: document_worker)
+
+if enable_gtk_unix_print
+  print_operation_test = executable(
+    'test-pps-print-operation',
+    'test-pps-print-operation.c',
+    include_directories: top_inc,
+    dependencies: [libppsview_dep, gtk_unix_print_dep],
+    c_args: cflags,
+  )
+  test('pps-print-operation-gui', print_operation_test, suite: 'gui', is_parallel: false)
+endif

@@ -157,6 +157,8 @@ mod imp {
 
         pub(super) display_name: RefCell<String>,
         pub(super) edit_name: RefCell<String>,
+        #[property(get)]
+        pub(super) title: RefCell<String>,
         pub(super) metadata: RefCell<Option<papers_view::Metadata>>,
 
         pub(super) link: RefCell<Option<papers_document::Link>>,
@@ -170,6 +172,7 @@ mod imp {
         pub(super) close_after_save: Cell<bool>,
         pub(super) close_after_print: Cell<bool>,
         pub(super) closing: Cell<bool>,
+        #[property(get)]
         pub(super) modified: Cell<bool>,
         pub(super) progress_cancellable: RefCell<Option<gio::Cancellable>>,
 
@@ -343,6 +346,7 @@ mod imp {
             self.highlight_color_popover.set_offset(0, -8);
             self.text_font_popover.set_offset(0, -8);
             self.text_color_popover.set_offset(0, -8);
+            self.update_title();
         }
     }
 

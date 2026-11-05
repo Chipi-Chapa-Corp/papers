@@ -7,7 +7,10 @@ fn closing_reports_the_result_without_destroying_the_container() {
         app.register(gio::Cancellable::NONE).unwrap();
 
         let view: PpsDocumentView = glib::Object::new();
-        let window = adw::Window::builder().content(&view).build();
+        let window = adw::Window::builder()
+            .title("Container")
+            .content(&view)
+            .build();
         window.present();
 
         let results = std::rc::Rc::new(RefCell::new(Vec::<bool>::new()));
@@ -37,13 +40,18 @@ fn closing_reports_the_result_without_destroying_the_container() {
         job.run();
         job.is_succeeded().unwrap();
         let document = job.loaded_document().unwrap();
+        view.set_filenames("utf16le-annot.pdf", "utf16le-annot.pdf");
         view.open_document(&document, None, None, WindowRunMode::Normal);
+        assert_eq!(view.title(), "utf16le-annot.pdf");
+        assert_eq!(window.title().as_deref(), Some("Container"));
+        assert!(!view.modified());
 
         let annotation = AnnotationText::new(&document.page(0).unwrap());
         document
             .dynamic_cast_ref::<DocumentAnnotations>()
             .unwrap()
             .add_annotation(&annotation);
+        assert!(view.modified());
 
         view.request_close();
         let dialog = window.visible_dialog().unwrap();

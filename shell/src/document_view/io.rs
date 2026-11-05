@@ -108,6 +108,7 @@ impl imp::PpsDocumentView {
         }
 
         self.modified.set(true);
+        self.obj().notify_modified();
 
         let window_title = self
             .header_bar
@@ -177,19 +178,18 @@ impl imp::PpsDocumentView {
             })
     }
 
-    fn update_title(&self) {
+    pub(super) fn update_title(&self) {
         let ltr = self.obj().direction() == gtk::TextDirection::Ltr;
         let doc_title = self.doc_title();
         let display_name = self.display_name.borrow();
 
-        let window = self.parent_window();
         let title_widget = self
             .header_bar
             .title_widget()
             .and_downcast::<adw::WindowTitle>()
             .unwrap();
 
-        if !display_name.is_empty() {
+        let title = if !display_name.is_empty() {
             if let Some(doc_title) = doc_title.filter(|title| !title.is_empty()) {
                 let title = if ltr {
                     format!("{doc_title} – {display_name}")
@@ -199,16 +199,20 @@ impl imp::PpsDocumentView {
 
                 let title = title.replace('\n', " ");
 
-                window.set_title(Some(&title));
                 title_widget.set_title(&doc_title);
                 title_widget.set_subtitle(&display_name);
+                title
             } else {
-                window.set_title(Some(&display_name));
                 title_widget.set_title(&display_name);
+                display_name.clone()
             }
         } else {
-            window.set_title(Some(&gettext("Papers")));
             title_widget.set_title(&gettext("Papers"));
+            gettext("Papers")
+        };
+
+        if self.title.replace(title.clone()) != title {
+            self.obj().notify_title();
         }
     }
 
@@ -293,7 +297,9 @@ impl imp::PpsDocumentView {
 
         self.set_default_actions();
 
-        self.modified.set(false);
+        if self.modified.replace(false) {
+            self.obj().notify_modified();
+        }
 
         let id = document.connect_modified_notify(glib::clone!(
             #[weak(rename_to = obj)]

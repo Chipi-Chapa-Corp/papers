@@ -114,6 +114,11 @@ mod imp {
 
             self.setup_actions();
 
+            self.document_view
+                .bind_property("title", self.obj().as_ref(), "title")
+                .sync_create()
+                .build();
+
             self.obj()
                 .change_action_state("night-mode", &self.settings.boolean("night-mode").into());
         }

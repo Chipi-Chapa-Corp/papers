@@ -165,11 +165,11 @@ pps_certificate_info_get_property (GObject *object,
 		break;
 
 	case PROP_ISSUANCE_TIME:
-		g_value_set_boxed (value, g_date_time_ref (priv->issuance_time));
+		g_value_set_boxed (value, priv->issuance_time);
 		break;
 
 	case PROP_EXPIRATION_TIME:
-		g_value_set_boxed (value, g_date_time_ref (priv->expiration_time));
+		g_value_set_boxed (value, priv->expiration_time);
 		break;
 
 	case PROP_STATUS:

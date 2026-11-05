@@ -1,11 +1,13 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #include "pps-annotation.h"
+#include "pps-certificate-info.h"
 #include "pps-document-objects-private.h"
 #include "pps-file-exporter-private.h"
 #include "pps-layer.h"
 #include "pps-link.h"
 #include "pps-media-private.h"
+#include "pps-signature.h"
 #include "pps-transition-effect.h"
 #include <glib/gstdio.h>
 
@@ -221,6 +223,33 @@ export_error_lifetime (void)
 	g_assert_cmpstr (error->message, ==, "First failure");
 }
 
+static void
+signature_date_properties (void)
+{
+	g_autoptr (PpsCertificateInfo) certificate = g_object_new (PPS_TYPE_CERTIFICATE_INFO, NULL);
+	g_autoptr (PpsSignature) signature = g_object_new (PPS_TYPE_SIGNATURE, "certificate-info", certificate, NULL);
+	g_autoptr (GDateTime) issuance = NULL, expiration = NULL, signed_at = NULL;
+	g_object_get (certificate, "issuance-time", &issuance, "expiration-time", &expiration, NULL);
+	g_object_get (signature, "signature-time", &signed_at, NULL);
+	g_assert_null (issuance);
+	g_assert_null (expiration);
+	g_assert_null (signed_at);
+
+	g_autoptr (GDateTime) date = g_date_time_new_from_iso8601 ("2024-03-27T12:34:56.123456+05:30", NULL);
+	g_clear_object (&signature);
+	g_clear_object (&certificate);
+	certificate = g_object_new (PPS_TYPE_CERTIFICATE_INFO, "issuance-time", date, "expiration-time", date, NULL);
+	signature = g_object_new (PPS_TYPE_SIGNATURE, "certificate-info", certificate, "signature-time", date, NULL);
+	g_object_get (certificate, "issuance-time", &issuance, "expiration-time", &expiration, NULL);
+	g_object_get (signature, "signature-time", &signed_at, NULL);
+	g_clear_object (&signature);
+	g_clear_object (&certificate);
+	g_clear_pointer (&date, g_date_time_unref);
+	g_assert_true (g_date_time_equal (issuance, expiration));
+	g_assert_true (g_date_time_equal (issuance, signed_at));
+	g_assert_cmpint (g_date_time_get_microsecond (signed_at), ==, 123456);
+}
+
 int
 main (int argc, char **argv)
 {
@@ -235,5 +264,6 @@ main (int argc, char **argv)
 	g_test_add_func ("/document-objects/transition-rectangular-property", transition_rectangular_property);
 	g_test_add_func ("/document-objects/media-temp-file-lifetime", media_temp_file_lifetime);
 	g_test_add_func ("/document-objects/export-error-lifetime", export_error_lifetime);
+	g_test_add_func ("/document-objects/signature-date-properties", signature_date_properties);
 	return g_test_run ();
 }

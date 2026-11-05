@@ -13,3 +13,13 @@ test_executable = executable(
 )
 
 test('pps-jobs-test', test_executable, env: backend_env)
+
+proxy_annotations_test = executable(
+  'test-pps-proxy-annotations',
+  'test-pps-proxy-annotations.c',
+  include_directories: top_inc,
+  dependencies: libppsview_dep,
+  c_args: cflags,
+)
+
+test('pps-proxy-annotations-test', proxy_annotations_test, env: backend_env, depends: document_worker)

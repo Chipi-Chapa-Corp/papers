@@ -5,6 +5,7 @@
  */
 
 #include "pps-attachment.h"
+#include "pps-attachment-private.h"
 #include "pps-file-helpers.h"
 #include <config.h>
 #include <glib/gi18n-lib.h>
@@ -217,6 +218,13 @@ pps_attachment_get_name (PpsAttachment *attachment)
 	priv = GET_PRIVATE (attachment);
 
 	return priv->name;
+}
+
+GBytes *
+_pps_attachment_get_data (PpsAttachment *attachment)
+{
+	PpsAttachmentPrivate *priv = GET_PRIVATE (attachment);
+	return g_bytes_new_with_free_func (priv->data, priv->size, g_object_unref, g_object_ref (attachment));
 }
 
 const gchar *

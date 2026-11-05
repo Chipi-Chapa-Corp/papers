@@ -1675,6 +1675,12 @@ pps_print_operation_print_begin_print (PpsPrintOperationPrint *print,
 	PpsPrintOperation *op = PPS_PRINT_OPERATION (print);
 	gint n_pages;
 
+	/* GTK 4.22.4 releases the preview surface both in launch_preview and
+	 * preview_print_idle_done. Supply the second reference it consumes. */
+	if (op->print_preview && gtk_get_major_version () == 4 &&
+	    gtk_get_minor_version () == 22 && gtk_get_micro_version () == 4)
+		cairo_surface_reference (cairo_get_target (gtk_print_context_get_cairo_context (context)));
+
 	n_pages = pps_document_get_n_pages (op->document);
 	gtk_print_operation_set_n_pages (print->op, n_pages);
 	pps_print_operation_update_status (op, -1, n_pages, 0);

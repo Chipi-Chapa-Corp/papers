@@ -94,6 +94,7 @@ mod imp {
         pub(super) load_job_handler: RefCell<Option<glib::SignalHandlerId>>,
         pub(super) reload_job: RefCell<Option<papers_view::JobLoad>>,
         pub(super) reload_job_handler: RefCell<Option<glib::SignalHandlerId>>,
+        pub(super) failure_handler: RefCell<Option<(Document, glib::SignalHandlerId)>>,
     }
 
     #[glib::object_subclass]
@@ -137,6 +138,13 @@ mod imp {
 
         fn constructed(&self) {
             self.parent_constructed();
+            self.document_view
+                .model()
+                .connect_document_notify(glib::clone!(
+                    #[weak(rename_to = obj)]
+                    self,
+                    move |model| obj.watch_document_failure(model.document())
+                ));
             self.document_view.connect_title_notify(glib::clone!(
                 #[weak(rename_to = obj)]
                 self,
@@ -152,6 +160,9 @@ mod imp {
         }
 
         fn dispose(&self) {
+            if let Some((document, handler)) = self.failure_handler.take() {
+                document.disconnect(handler);
+            }
             self.default_settings.apply();
             self.cancel_tasks();
             self.clear_local_uri();
@@ -162,6 +173,55 @@ mod imp {
     impl BinImpl for PpsDocumentTab {}
 
     impl PpsDocumentTab {
+        fn watch_document_failure(&self, document: Option<Document>) {
+            if let Some((previous, handler)) = self.failure_handler.take() {
+                previous.disconnect(handler);
+            }
+            let Some(document) =
+                document.filter(|document| document.find_property("error").is_some())
+            else {
+                return;
+            };
+            let handler = document.connect_local(
+                "failed",
+                false,
+                glib::clone!(
+                    #[weak(rename_to = obj)]
+                    self,
+                    #[upgrade_or_default]
+                    move |args| {
+                        obj.document_failed(
+                            args[0].get::<Document>().unwrap(),
+                            args[1].get::<glib::Error>().unwrap(),
+                        );
+                        None
+                    }
+                ),
+            );
+            self.failure_handler
+                .replace(Some((document.clone(), handler)));
+            if let Some(error) = document.property::<Option<glib::Error>>("error") {
+                self.document_failed(document, error);
+            }
+        }
+
+        fn document_failed(&self, document: Document, error: glib::Error) {
+            // A worker can fail while its document is being installed in the view.
+            glib::idle_add_local_once(glib::clone!(
+                #[weak(rename_to = obj)]
+                self,
+                move || {
+                    if obj.obj().document().as_ref() != Some(&document) {
+                        return;
+                    }
+                    obj.cancel_tasks();
+                    obj.stop_presentation();
+                    obj.document_view.reload_document(None);
+                    obj.show_error(Some(&error));
+                }
+            ));
+        }
+
         fn window(&self) -> Option<PpsWindow> {
             self.obj().root().and_downcast::<PpsWindow>()
         }

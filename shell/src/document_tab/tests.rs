@@ -2,6 +2,46 @@ use super::*;
 use crate::tests::{fixture, wait_until};
 
 #[test]
+fn document_failure_reaches_copies_without_closing_other_documents() {
+    crate::tests::run(|| {
+        let source = PpsDocumentTab::new();
+        let copy = PpsDocumentTab::new();
+        let other = PpsDocumentTab::new();
+        let contents = gtk::Box::new(gtk::Orientation::Horizontal, 0);
+        for tab in [&source, &copy, &other] {
+            contents.append(tab);
+        }
+        let window = adw::Window::builder().content(&contents).build();
+        window.present();
+        source.open(&fixture("utf16le-annot.pdf"), None, None);
+        other.open(&fixture("ink_annotations.pdf"), None, None);
+        wait_until("documents", || {
+            source.document().is_some() && other.document().is_some()
+        });
+        copy.open_copy_from(&source, None);
+        let failed = source.document().unwrap();
+        let survivor = other.document();
+        let error = glib::Error::new(gio::IOErrorEnum::Closed, "The document worker exited");
+        failed.emit_by_name::<()>("failed", &[&error]);
+        wait_until("document errors", || {
+            source.imp().mode.get() == WindowRunMode::ErrorView
+                && copy.imp().mode.get() == WindowRunMode::ErrorView
+        });
+        assert!(source.document().is_none());
+        assert!(copy.document().is_none());
+        assert_eq!(other.document(), survivor);
+        source.open(&fixture("utf16le-annot.pdf"), None, None);
+        wait_until("reopened document", || source.document().is_some());
+        let reopened = source.document();
+        assert_ne!(reopened, Some(failed.clone()));
+        failed.emit_by_name::<()>("failed", &[&error]);
+        while glib::MainContext::default().iteration(false) {}
+        assert_eq!(source.document(), reopened);
+        window.destroy();
+    });
+}
+
+#[test]
 fn document_loading_and_passwords_belong_to_each_tab() {
     crate::tests::run(|| {
         let document = PpsDocumentTab::new();

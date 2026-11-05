@@ -399,6 +399,7 @@ main (int argc, char **argv)
 	pps_document_worker_bind_annotations (&worker, interface);
 	pps_document_worker_bind_fonts (&worker, interface);
 	pps_document_worker_bind_images (&worker, interface);
+	pps_document_worker_bind_transition (&worker, interface);
 	if (!g_dbus_interface_skeleton_export (G_DBUS_INTERFACE_SKELETON (interface),
 	                                       connection, PPS_DOCUMENT_WORKER_PATH, &error)) {
 		pps_shutdown ();

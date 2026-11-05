@@ -60,6 +60,14 @@
       <arg name="present" type="b" direction="out"/>
       <arg name="buffer" type="(hiiib)" direction="out"/>
     </method>
+    <method name="GetPageDuration">
+      <arg name="page" type="i" direction="in"/>
+      <arg name="duration" type="d" direction="out"/>
+    </method>
+    <method name="GetTransitionEffect">
+      <arg name="page" type="i" direction="in"/>
+      <arg name="effect" type="(iiiididb)" direction="out"/>
+    </method>
     <method name="GetAttachments">
       <annotation name="org.gtk.GDBus.C.UnixFD" value="true"/>
       <arg name="start" type="u" direction="in"/>

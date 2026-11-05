@@ -160,12 +160,11 @@ pps_annotations_context_setup_document (PpsAnnotationsContext *self,
 {
 	PpsAnnotationsContextPrivate *priv = GET_PRIVATE (self);
 
+	pps_annotations_context_clear_job (self);
 	g_list_store_remove_all (priv->annots_model);
 
 	if (!PPS_IS_DOCUMENT_ANNOTATIONS (document))
 		return;
-
-	pps_annotations_context_clear_job (self);
 
 	priv->job = PPS_JOB_ANNOTS (pps_job_annots_new (document));
 	g_signal_connect (priv->job, "finished",

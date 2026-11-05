@@ -279,9 +279,10 @@ pps_signature_set_password (PpsSignature *self,
                             const char *password)
 {
 	PpsSignaturePrivate *priv = GET_SIG_PRIVATE (self);
+	char *copy = g_strdup (password);
 
 	g_free (priv->password);
-	priv->password = g_strdup (password);
+	priv->password = copy;
 }
 
 const char *

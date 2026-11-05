@@ -277,6 +277,8 @@ signature_password (void)
 	pps_signature_set_password (signature, password);
 	g_clear_pointer (&password, g_free);
 	g_assert_cmpstr (pps_signature_get_password (signature), ==, "test password");
+	pps_signature_set_password (signature, pps_signature_get_password (signature));
+	g_assert_cmpstr (pps_signature_get_password (signature), ==, "test password");
 	pps_signature_set_password (signature, "replacement");
 	g_assert_cmpstr (pps_signature_get_password (signature), ==, "replacement");
 	pps_signature_set_password (signature, NULL);

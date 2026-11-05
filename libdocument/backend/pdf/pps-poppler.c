@@ -4495,7 +4495,7 @@ pdf_document_signatures_sign (PpsDocumentSignatures *document,
 	PopplerRectangle signing_rect;
 	PpsRectangle *rect;
 	g_autoptr (PpsPage) page = pps_document_get_page (PPS_DOCUMENT (document),
-	                                               pps_signature_get_page (signature));
+	                                                  pps_signature_get_page (signature));
 	PopplerColor color;
 	GdkRGBA rgba;
 

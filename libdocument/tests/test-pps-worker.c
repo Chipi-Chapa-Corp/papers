@@ -2,6 +2,9 @@
 
 #include <fcntl.h>
 #include <gio/gunixfdlist.h>
+#include <math.h>
+#include <signal.h>
+#include <sys/wait.h>
 #include <unistd.h>
 
 #include "pps-document-session-private.h"
@@ -188,6 +191,148 @@ cancel_startup (void)
 	g_assert_error (error, G_IO_ERROR, G_IO_ERROR_CANCELLED);
 }
 
+static void
+render_pages (void)
+{
+	g_autoptr (PpsDocumentSession) session = new_session ();
+	g_autoptr (PpsPage) page = pps_page_new (0);
+	g_autoptr (PpsRenderContext) context = pps_render_context_new (page, 0, .5, PPS_RENDER_ANNOTS_ALL);
+	g_autoptr (GError) error = NULL;
+	double width, height;
+
+	g_assert_cmpint (load (session, "utf16le-annot.pdf", "", &error), ==, 1);
+	g_assert_no_error (error);
+	g_assert_true (pps_dbus_document_call_get_page_info_sync (
+	    session->proxy, 0, G_DBUS_CALL_FLAGS_NONE, 5000,
+	    &width, &height, NULL, NULL, &error));
+	g_assert_no_error (error);
+	for (int rotation = 0; rotation < 360; rotation += 90) {
+		context->rotation = rotation;
+		for (int thumbnail = 0; thumbnail <= 1; thumbnail++) {
+			cairo_surface_t *surface = _pps_document_session_render (session, context, thumbnail, NULL, &error);
+			gboolean flipped = rotation == 90 || rotation == 270;
+			g_assert_no_error (error);
+			g_assert_nonnull (surface);
+			g_assert_cmpint (cairo_image_surface_get_width (surface), ==,
+			                 (int) ((flipped ? height : width) * .5 + .5));
+			g_assert_cmpint (cairo_image_surface_get_height (surface), ==,
+			                 (int) ((flipped ? width : height) * .5 + .5));
+			cairo_surface_destroy (surface);
+		}
+	}
+	/* Explicit target sizes are independent of the scale factor. */
+	context->scale = 0;
+	pps_render_context_set_target_size (context, 160, 200);
+	cairo_surface_t *surface = _pps_document_session_render (session, context, FALSE, NULL, &error);
+	g_assert_no_error (error);
+	g_assert_cmpint (cairo_image_surface_get_width (surface), ==, 160);
+	g_assert_cmpint (cairo_image_surface_get_height (surface), ==, 200);
+	unsigned char *pixels = cairo_image_surface_get_data (surface);
+	gsize size = cairo_image_surface_get_stride (surface) * 200;
+	gboolean nonuniform = FALSE;
+	for (gsize i = 4; i < size; i += 4) {
+		if (memcmp (pixels, pixels + i, 4) != 0) {
+			nonuniform = TRUE;
+			break;
+		}
+	}
+	g_assert_true (nonuniform);
+	cairo_surface_destroy (surface);
+
+	pps_render_context_set_target_size (context, -1, -1);
+	context->scale = .5;
+	context->rotation = 45;
+	g_assert_null (_pps_document_session_render (session, context, FALSE, NULL, &error));
+	g_assert_error (error, G_IO_ERROR, G_IO_ERROR_INVALID_ARGUMENT);
+	g_clear_error (&error);
+	context->rotation = 0;
+	context->scale = NAN;
+	g_assert_null (_pps_document_session_render (session, context, FALSE, NULL, &error));
+	g_assert_error (error, G_IO_ERROR, G_IO_ERROR_INVALID_ARGUMENT);
+	g_clear_error (&error);
+	context->scale = 1e100;
+	g_assert_null (_pps_document_session_render (session, context, FALSE, NULL, &error));
+	g_assert_error (error, G_IO_ERROR, G_IO_ERROR_INVALID_ARGUMENT);
+	g_clear_error (&error);
+	context->scale = .5;
+	surface = _pps_document_session_render (session, context, FALSE, NULL, &error);
+	g_assert_no_error (error);
+	g_assert_nonnull (surface);
+	cairo_surface_destroy (surface);
+}
+
+typedef struct {
+	GMainLoop *loop;
+	GError *error;
+} PendingRequest;
+
+static void
+render_finished (GObject *source, GAsyncResult *result, gpointer data)
+{
+	PendingRequest *request = data;
+	g_autoptr (GVariant) buffer = NULL;
+	g_autoptr (GUnixFDList) descriptors = NULL;
+
+	g_assert_false (pps_dbus_document_call_render_finish (
+	    PPS_DBUS_DOCUMENT (source), &buffer, &descriptors, result, &request->error));
+	g_main_loop_quit (request->loop);
+}
+
+static void
+pending_request (gconstpointer data)
+{
+	gboolean crash = GPOINTER_TO_INT (data);
+	g_autoptr (PpsDocumentSession) first = new_session ();
+	g_autoptr (PpsDocumentSession) second = new_session ();
+	g_autoptr (GCancellable) cancellable = g_cancellable_new ();
+	g_autoptr (GMainLoop) loop = g_main_loop_new (NULL, FALSE);
+	g_autoptr (GError) error = NULL;
+	PendingRequest request = { loop, NULL };
+	siginfo_t status;
+	pid_t pid = g_ascii_strtoll (g_subprocess_get_identifier (first->process), NULL, 10);
+
+	g_assert_cmpint (load (first, "utf16le-annot.pdf", "", &error), ==, 1);
+	g_assert_no_error (error);
+	g_assert_cmpint (load (second, "utf16le-annot.pdf", "", &error), ==, 1);
+	g_assert_no_error (error);
+	g_subprocess_send_signal (first->process, SIGSTOP);
+	g_assert_cmpint (waitid (P_PID, pid, &status, WSTOPPED | WNOWAIT), ==, 0);
+	g_assert_cmpint (status.si_code, ==, CLD_STOPPED);
+	pps_dbus_document_call_render (
+	    first->proxy, 0, 0, .5, -1, -1, PPS_RENDER_ANNOTS_ALL, FALSE,
+	    G_DBUS_CALL_FLAGS_NONE, 5000, NULL, cancellable, render_finished, &request);
+	/* A suspended worker cannot prevent another document from responding. */
+	page_info (second);
+	if (crash)
+		g_subprocess_force_exit (first->process);
+	else
+		g_cancellable_cancel (cancellable);
+	g_main_loop_run (loop);
+	g_assert_nonnull (request.error);
+	if (!crash) {
+		g_assert_error (request.error, G_IO_ERROR, G_IO_ERROR_CANCELLED);
+		g_subprocess_send_signal (first->process, SIGCONT);
+		page_info (first);
+	}
+	g_clear_error (&request.error);
+	page_info (second);
+}
+
+static void
+startup_failure (gconstpointer data)
+{
+	if (!g_test_subprocess ()) {
+		g_test_trap_subprocess (NULL, 5 * G_USEC_PER_SEC, G_TEST_SUBPROCESS_DEFAULT);
+		g_test_trap_assert_passed ();
+		return;
+	}
+	g_autoptr (GError) error = NULL;
+	g_setenv ("PPS_DOCUMENT_WORKER", data, TRUE);
+	g_autoptr (PpsDocumentSession) session = _pps_document_session_new (NULL, &error);
+	g_assert_null (session);
+	g_assert_nonnull (error);
+}
+
 int
 main (int argc, char **argv)
 {
@@ -198,5 +343,10 @@ main (int argc, char **argv)
 	g_test_add_func ("/document-worker/independent-failure", worker_failure_is_independent);
 	g_test_add_func ("/document-worker/disconnect", disconnect_stops_worker);
 	g_test_add_func ("/document-worker/cancel-startup", cancel_startup);
+	g_test_add_func ("/document-worker/render", render_pages);
+	g_test_add_data_func ("/document-worker/pending-crash", GINT_TO_POINTER (TRUE), pending_request);
+	g_test_add_data_func ("/document-worker/pending-cancel", GINT_TO_POINTER (FALSE), pending_request);
+	g_test_add_data_func ("/document-worker/startup-missing", "/nonexistent/papers-test-worker", startup_failure);
+	g_test_add_data_func ("/document-worker/startup-no-handshake", "/usr/bin/true", startup_failure);
 	return g_test_run ();
 }

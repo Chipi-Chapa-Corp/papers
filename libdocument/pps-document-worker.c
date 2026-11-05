@@ -3,8 +3,10 @@
 #include "config.h"
 
 #include <gio/gunixfdlist.h>
+#include <math.h>
 #include <papers-document.h>
 
+#include "pps-document-buffer-private.h"
 #include "pps-document-factory-private.h"
 #include "pps-document-session-private.h"
 #include "pps-document-signatures.h"
@@ -135,6 +137,19 @@ load_document_fd (PpsDBusDocument *interface,
 }
 
 static gboolean
+check_page (Worker *worker, int page, GDBusMethodInvocation *invocation)
+{
+	if (!worker->loaded || page < 0 ||
+	    page >= pps_document_get_n_pages (worker->document)) {
+		g_dbus_method_invocation_return_error_literal (
+		    invocation, G_IO_ERROR, G_IO_ERROR_INVALID_ARGUMENT,
+		    "Page is outside the loaded document");
+		return FALSE;
+	}
+	return TRUE;
+}
+
+static gboolean
 get_page_info (PpsDBusDocument *interface,
                GDBusMethodInvocation *invocation,
                int page,
@@ -143,17 +158,73 @@ get_page_info (PpsDBusDocument *interface,
 	g_autofree char *label = NULL;
 	double width, height;
 
-	if (!worker->loaded || page < 0 ||
-	    page >= pps_document_get_n_pages (worker->document)) {
-		g_dbus_method_invocation_return_error_literal (
-		    invocation, G_IO_ERROR, G_IO_ERROR_INVALID_ARGUMENT,
-		    "Page is outside the loaded document");
+	if (!check_page (worker, page, invocation))
 		return TRUE;
-	}
 	pps_document_get_page_size (worker->document, page, &width, &height);
 	label = pps_document_get_page_label (worker->document, page);
 	pps_dbus_document_complete_get_page_info (interface, invocation,
 	                                          width, height, label ? label : "");
+	return TRUE;
+}
+
+static gboolean
+render (PpsDBusDocument *interface,
+        GDBusMethodInvocation *invocation,
+        GUnixFDList *input_fds,
+        int page_index,
+        int rotation,
+        double scale,
+        int target_width,
+        int target_height,
+        guint annotations,
+        gboolean thumbnail,
+        Worker *worker)
+{
+	g_autoptr (PpsPage) page = NULL;
+	g_autoptr (PpsRenderContext) context = NULL;
+	g_autoptr (GUnixFDList) descriptors = NULL;
+	g_autoptr (GError) error = NULL;
+	cairo_surface_t *surface;
+	GVariant *buffer;
+	double width, height;
+
+	if (!check_page (worker, page_index, invocation))
+		return TRUE;
+	if (rotation < 0 || rotation > 270 || rotation % 90 != 0 ||
+	    !isfinite (scale) ||
+	    !((target_width == -1 && target_height == -1 && scale > 0) ||
+	      (target_width > 0 && target_height > 0)))
+		goto invalid;
+	pps_document_get_page_size (worker->document, page_index, &width, &height);
+	if (rotation == 90 || rotation == 270) {
+		double swap = width;
+		width = height;
+		height = swap;
+	}
+	width = target_width > 0 ? target_width : floor (width * scale + 0.5);
+	height = target_height > 0 ? target_height : floor (height * scale + 0.5);
+	if (!isfinite (width) || !isfinite (height) || width < 1 || height < 1 ||
+	    width > G_MAXINT || height > G_MAXINT ||
+	    cairo_format_stride_for_width (CAIRO_FORMAT_ARGB32, (int) width) < 0)
+		goto invalid;
+
+	page = pps_document_get_page (worker->document, page_index);
+	context = pps_render_context_new (page, rotation, scale, annotations);
+	pps_render_context_set_target_size (context, target_width, target_height);
+	surface = thumbnail ? pps_document_get_thumbnail_surface (worker->document, context) : pps_document_render (worker->document, context);
+	buffer = _pps_document_surface_to_buffer (surface, &descriptors, &error);
+	if (surface)
+		cairo_surface_destroy (surface);
+	if (!buffer)
+		g_dbus_method_invocation_return_gerror (invocation, error);
+	else
+		pps_dbus_document_complete_render (interface, invocation, descriptors, buffer);
+	return TRUE;
+
+invalid:
+	g_dbus_method_invocation_return_error_literal (
+	    invocation, G_IO_ERROR, G_IO_ERROR_INVALID_ARGUMENT,
+	    "Invalid render dimensions or rotation");
 	return TRUE;
 }
 
@@ -202,6 +273,7 @@ main (int argc, char **argv)
 	g_signal_connect (interface, "handle-load", G_CALLBACK (load_document), &worker);
 	g_signal_connect (interface, "handle-load-fd", G_CALLBACK (load_document_fd), &worker);
 	g_signal_connect (interface, "handle-get-page-info", G_CALLBACK (get_page_info), &worker);
+	g_signal_connect (interface, "handle-render", G_CALLBACK (render), &worker);
 	if (!g_dbus_interface_skeleton_export (G_DBUS_INTERFACE_SKELETON (interface),
 	                                       connection, PPS_DOCUMENT_WORKER_PATH, &error)) {
 		pps_shutdown ();

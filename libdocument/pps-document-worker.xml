@@ -24,5 +24,16 @@
       <arg name="height" type="d" direction="out"/>
       <arg name="label" type="s" direction="out"/>
     </method>
+    <method name="Render">
+      <annotation name="org.gtk.GDBus.C.UnixFD" value="true"/>
+      <arg name="page" type="i" direction="in"/>
+      <arg name="rotation" type="i" direction="in"/>
+      <arg name="scale" type="d" direction="in"/>
+      <arg name="target_width" type="i" direction="in"/>
+      <arg name="target_height" type="i" direction="in"/>
+      <arg name="annotations" type="u" direction="in"/>
+      <arg name="thumbnail" type="b" direction="in"/>
+      <arg name="buffer" type="(hiiiidddd)" direction="out"/>
+    </method>
   </interface>
 </node>

@@ -6,6 +6,7 @@
 #include <sys/socket.h>
 #include <unistd.h>
 
+#include "pps-document-buffer-private.h"
 #include "pps-document-session-private.h"
 
 void
@@ -78,4 +79,24 @@ _pps_document_session_new (GCancellable *cancellable,
 		return NULL;
 
 	return g_steal_pointer (&session);
+}
+
+cairo_surface_t *
+_pps_document_session_render (PpsDocumentSession *session,
+                              PpsRenderContext *context,
+                              gboolean thumbnail,
+                              GCancellable *cancellable,
+                              GError **error)
+{
+	g_autoptr (GVariant) buffer = NULL;
+	g_autoptr (GUnixFDList) descriptors = NULL;
+
+	if (!pps_dbus_document_call_render_sync (
+		session->proxy, context->page->index, context->rotation,
+		context->scale, context->target_width, context->target_height,
+		context->annot_flags, thumbnail,
+		G_DBUS_CALL_FLAGS_NONE, -1, NULL, &buffer, &descriptors,
+		cancellable, error))
+		return NULL;
+	return _pps_document_surface_from_buffer (buffer, descriptors, error);
 }

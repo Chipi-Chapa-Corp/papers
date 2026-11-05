@@ -81,6 +81,11 @@ mod imp {
         // Reload
         pub(super) uri_mtime: Cell<i64>,
 
+        pub(super) load_task: RefCell<Option<glib::JoinHandle<()>>>,
+        pub(super) password_task: RefCell<Option<glib::JoinHandle<()>>>,
+        pub(super) reload_task: RefCell<Option<glib::JoinHandle<()>>>,
+        pub(super) progress_task: RefCell<Option<glib::JoinHandle<()>>>,
+
         // Job
         pub(super) load_job: RefCell<Option<papers_view::JobLoad>>,
         pub(super) load_job_handler: RefCell<Option<glib::SignalHandlerId>>,
@@ -145,8 +150,7 @@ mod imp {
 
         fn dispose(&self) {
             self.default_settings.apply();
-            self.clear_load_job();
-            self.clear_reload_job();
+            self.cancel_tasks();
             self.clear_local_uri();
         }
     }
@@ -165,6 +169,40 @@ mod imp {
             } else {
                 self.document_view.title()
             }
+        }
+
+        fn replace_task(slot: &RefCell<Option<glib::JoinHandle<()>>>, task: glib::JoinHandle<()>) {
+            if let Some(previous) = slot.replace(Some(task)) {
+                previous.abort();
+            }
+        }
+
+        fn cancel_tasks(&self) {
+            for slot in [
+                &self.load_task,
+                &self.password_task,
+                &self.reload_task,
+                &self.progress_task,
+            ] {
+                if let Some(task) = slot.take() {
+                    task.abort();
+                }
+            }
+            self.clear_load_job();
+            self.clear_reload_job();
+        }
+
+        fn cancel_open(&self) {
+            self.cancel_tasks();
+            self.clear_local_uri();
+            self.monitor.take();
+            self.file.take();
+            self.metadata.take();
+            self.dest.take();
+            self.display_name.borrow_mut().clear();
+            self.obj().notify_display_name();
+            self.obj().notify_title();
+            self.set_mode(WindowRunMode::StartView);
         }
 
         // field getter
@@ -270,9 +308,14 @@ mod imp {
                     self,
                     move |_, response| {
                         if response == "yes" {
-                            glib::spawn_future_local(async move {
-                                obj.reload_document().await;
-                            });
+                            let task = glib::spawn_future_local(glib::clone!(
+                                #[weak]
+                                obj,
+                                async move {
+                                    obj.reload_document().await;
+                                }
+                            ));
+                            Self::replace_task(&obj.reload_task, task);
                         }
                     }
                 ),
@@ -496,7 +539,7 @@ mod imp {
 
                 use futures::stream::StreamExt;
 
-                glib::spawn_future_local(glib::clone!(
+                let task = glib::spawn_future_local(glib::clone!(
                     #[weak(rename_to = obj)]
                     self,
                     async move {
@@ -509,6 +552,7 @@ mod imp {
                         }
                     }
                 ));
+                Self::replace_task(&self.progress_task, task);
 
                 let result = result.await;
 
@@ -695,13 +739,14 @@ mod imp {
 
         fn file_changed(&self) {
             if !self.check_document_modified_reload() {
-                glib::spawn_future_local(glib::clone!(
+                let task = glib::spawn_future_local(glib::clone!(
                     #[weak(rename_to = obj)]
                     self,
                     async move {
                         obj.reload_document().await;
                     }
                 ));
+                Self::replace_task(&self.reload_task, task);
             }
         }
 
@@ -711,7 +756,7 @@ mod imp {
             dest: Option<&papers_document::LinkDest>,
             mode: Option<WindowRunMode>,
         ) {
-            self.clear_load_job();
+            self.cancel_tasks();
             self.clear_local_uri();
 
             self.dest.replace(dest.cloned());
@@ -817,7 +862,9 @@ mod imp {
                             obj.clear_load_job();
                         }
                         Err(e) => {
-                            glib::spawn_future_local(glib::clone!(
+                            let task = glib::spawn_future_local(glib::clone!(
+                                #[weak]
+                                obj,
                                 #[weak]
                                 job,
                                 async move {
@@ -864,6 +911,7 @@ mod imp {
                                     }
                                 }
                             ));
+                            Self::replace_task(&obj.password_task, task);
                         }
                     }
                 }
@@ -877,7 +925,7 @@ mod imp {
 
             let file = file.clone();
 
-            glib::spawn_future_local(glib::clone!(
+            let task = glib::spawn_future_local(glib::clone!(
                 #[weak(rename_to = obj)]
                 self,
                 async move {
@@ -947,6 +995,7 @@ mod imp {
                     }
                 }
             ));
+            Self::replace_task(&self.load_task, task);
         }
     }
 
@@ -959,6 +1008,11 @@ mod imp {
 
         #[template_callback]
         fn document_view_close_finished(&self, allowed: bool) {
+            if allowed {
+                self.cancel_tasks();
+                self.monitor.take();
+                self.clear_local_uri();
+            }
             self.obj().emit_by_name::<()>("close-finished", &[&allowed]);
         }
 
@@ -970,8 +1024,7 @@ mod imp {
 
         #[template_callback]
         fn loader_view_cancelled(&self) {
-            // FIXME: cancellable
-            self.set_mode(WindowRunMode::StartView);
+            self.cancel_open();
         }
 
         #[template_callback]
@@ -987,9 +1040,7 @@ mod imp {
 
         #[template_callback]
         fn password_view_cancelled(&self) {
-            if self.mode.get() == WindowRunMode::StartView {
-                self.clear_load_job();
-            }
+            self.cancel_open();
         }
 
         fn launch_external_uri(&self, action: &LinkAction) {

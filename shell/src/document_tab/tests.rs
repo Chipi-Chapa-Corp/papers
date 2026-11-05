@@ -17,16 +17,29 @@ fn document_loading_and_passwords_belong_to_each_tab() {
         wait_until("document and password prompt", || {
             document.document().is_some()
                 && encrypted.imp().mode.get() == WindowRunMode::PasswordView
+                && window.visible_dialog().is_some()
         });
         assert!(!document.loading());
         assert!(encrypted.loading());
         assert!(encrypted.document().is_none());
         assert_eq!(document.display_name(), "utf16le-annot.pdf");
 
-        encrypted
-            .imp()
-            .password_view
-            .emit_by_name::<()>("unlock", &[&"password", &gio::PasswordSave::Never]);
+        let dialog = window
+            .visible_dialog()
+            .and_downcast::<adw::AlertDialog>()
+            .unwrap();
+        let entry = dialog
+            .extra_child()
+            .unwrap()
+            .first_child()
+            .and_downcast::<gtk::PasswordEntry>()
+            .unwrap();
+        entry.set_text("password");
+        dialog
+            .default_widget()
+            .and_downcast::<gtk::Button>()
+            .unwrap()
+            .emit_clicked();
         wait_until("unlocked document", || encrypted.document().is_some());
         assert!(!encrypted.loading());
         assert_ne!(document.document(), encrypted.document());
@@ -96,6 +109,41 @@ fn a_document_copy_keeps_its_temporary_file_alive() {
         drop(copy);
         wait_until("document copy disposal", || copy_ref.upgrade().is_none());
         assert!(!downloaded.query_exists(gio::Cancellable::NONE));
+        window.destroy();
+    });
+}
+
+#[test]
+fn closing_or_canceling_a_load_releases_its_pending_work() {
+    crate::tests::run(|| {
+        let loading = PpsDocumentTab::new();
+        let window = adw::Window::builder().content(&loading).build();
+        window.present();
+        loading.open(&fixture("PasswordEncrypted.pdf"), None, None);
+        assert!(loading.loading());
+        loading.request_close();
+        assert!(!loading.loading());
+        let loading_ref = loading.downgrade();
+        window.set_content(gtk::Widget::NONE);
+        drop(loading);
+        wait_until("closed loader disposal", || loading_ref.upgrade().is_none());
+
+        let canceled = PpsDocumentTab::new();
+        window.set_content(Some(&canceled));
+        canceled.open(&fixture("PasswordEncrypted.pdf"), None, None);
+        wait_until("password prompt", || {
+            canceled.imp().mode.get() == WindowRunMode::PasswordView
+                && window.visible_dialog().is_some()
+        });
+        window.visible_dialog().unwrap().force_close();
+        wait_until("password cancellation", || !canceled.loading());
+        assert!(canceled.is_empty());
+        assert!(canceled.uri().is_none());
+
+        canceled.open(&fixture("utf16le-annot.pdf"), None, None);
+        wait_until("document after cancellation", || {
+            canceled.document().is_some()
+        });
         window.destroy();
     });
 }

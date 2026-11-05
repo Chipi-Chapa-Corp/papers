@@ -181,6 +181,7 @@ libppsdocument = shared_library(
     'pps-document-link-variant.c',
     'pps-document-form-variant.c',
     'pps-document-attachment-variant.c',
+    'pps-document-annotation-variant.c',
     'pps-document-tree.c',
     'pps-document-mapping.c',
   ],

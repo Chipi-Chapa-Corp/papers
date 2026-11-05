@@ -365,6 +365,7 @@ gnome.post_install(
 # *** File Tests ***
 enable_file_tests = get_option('file_tests')
 if enable_file_tests
+  subdir('libdocument/tests')
   subdir('libview/tests')
 endif
 

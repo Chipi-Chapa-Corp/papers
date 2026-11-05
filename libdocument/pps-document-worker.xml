@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- SPDX-License-Identifier: GPL-2.0-or-later -->
+<node>
+  <!-- Private peer interface, shared by one document and its worker. -->
+  <interface name="org.gnome.Papers.Document">
+    <method name="Create">
+      <arg name="mime_type" type="s" direction="in"/>
+      <arg name="interfaces" type="as" direction="out"/>
+    </method>
+    <method name="Load">
+      <arg name="uri" type="s" direction="in"/>
+      <arg name="password" type="s" direction="in"/>
+      <arg name="n_pages" type="i" direction="out"/>
+    </method>
+    <method name="LoadFd">
+      <annotation name="org.gtk.GDBus.C.UnixFD" value="true"/>
+      <arg name="fd" type="h" direction="in"/>
+      <arg name="password" type="s" direction="in"/>
+      <arg name="n_pages" type="i" direction="out"/>
+    </method>
+    <method name="GetPageInfo">
+      <arg name="page" type="i" direction="in"/>
+      <arg name="width" type="d" direction="out"/>
+      <arg name="height" type="d" direction="out"/>
+      <arg name="label" type="s" direction="out"/>
+    </method>
+  </interface>
+</node>

@@ -145,12 +145,27 @@ cflags = [
   '-DPPS_BACKENDSDIR="@0@"'.format(pps_backendsdir),
   '-DPPS_BACKENDSBINARYVERSION="@0@"'.format(pps_backends_binary_version),
   '-DPAPERS_COMPILATION',
+  '-DPPS_DOCUMENT_WORKER="@0@"'.format(join_paths(pps_prefix, get_option('libexecdir'), 'papers-document-worker')),
 ]
+
+document_dbus = gnome.gdbus_codegen(
+  'pps-document-dbus',
+  'pps-document-worker.xml',
+  interface_prefix: 'org.gnome.Papers.',
+  namespace: 'PpsDBus',
+  autocleanup: 'all',
+  extra_args: [
+    '--pragma-once',
+    '--glib-min-required', '2.75',
+    '--symbol-decorator', 'PPS_PRIVATE',
+    '--symbol-decorator-header', 'pps-macros.h',
+  ],
+)
 
 libppsdocument = shared_library(
   'ppsdocument-' + pps_api_version,
   version: pps_document_version,
-  sources: sources + enum_sources + [version_header],
+  sources: sources + enum_sources + [version_header] + document_dbus + ['pps-document-session.c'],
   include_directories: top_inc,
   dependencies: libdocument_deps,
   c_args: cflags,
@@ -213,3 +228,19 @@ if gobject_introspection_dep.found()
 endif
 
 subdir('backend')
+
+document_worker = executable(
+  'papers-document-worker',
+  'pps-document-worker.c',
+  document_dbus[1],
+  include_directories: top_inc,
+  dependencies: libppsdocument_dep,
+  c_args: cflags,
+  install: true,
+  install_dir: get_option('libexecdir'),
+)
+
+worker_env = environment()
+worker_env.set('PPS_DOCUMENT_WORKER', document_worker.full_path())
+backend_env.set('PPS_DOCUMENT_WORKER', document_worker.full_path())
+meson.add_devenv(worker_env)

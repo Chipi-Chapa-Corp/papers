@@ -26,6 +26,38 @@ identity_and_scope (void)
 	g_assert_true (_pps_document_objects_lookup (client, G_MAXUINT64, PPS_TYPE_LAYER) == G_OBJECT (original));
 }
 
+typedef struct {
+	PpsDocumentObjects *objects;
+	GObject *object;
+} ExportTask;
+
+static gpointer
+export_repeatedly (gpointer data)
+{
+	ExportTask *task = data;
+	for (int i = 0; i < 1000; i++) {
+		guint64 id = _pps_document_objects_export (task->objects, task->object);
+		g_assert_cmpuint (id, !=, 0);
+		g_assert_true (_pps_document_objects_lookup (task->objects, id, G_TYPE_OBJECT) == task->object);
+	}
+	return NULL;
+}
+
+static void
+concurrent_identity (void)
+{
+	/* Exports can originate from a document job or the UI thread. */
+	g_autoptr (PpsDocumentObjects) objects = _pps_document_objects_new ();
+	g_autoptr (GObject) object = g_object_new (G_TYPE_OBJECT, NULL);
+	ExportTask task = { objects, object };
+	GThread *threads[4];
+	for (guint i = 0; i < G_N_ELEMENTS (threads); i++)
+		threads[i] = g_thread_new ("export-object", export_repeatedly, &task);
+	for (guint i = 0; i < G_N_ELEMENTS (threads); i++)
+		g_thread_join (threads[i]);
+	g_assert_cmpuint (_pps_document_objects_get_id (objects, object), ==, 1);
+}
+
 static void
 owned_lifetime (void)
 {
@@ -50,5 +82,6 @@ main (int argc, char **argv)
 	g_test_init (&argc, &argv, NULL);
 	g_test_add_func ("/document-objects/identity-and-scope", identity_and_scope);
 	g_test_add_func ("/document-objects/owned-lifetime", owned_lifetime);
+	g_test_add_func ("/document-objects/concurrent-identity", concurrent_identity);
 	return g_test_run ();
 }

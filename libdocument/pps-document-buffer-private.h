@@ -14,6 +14,13 @@
 #define PPS_DOCUMENT_BUFFER_TYPE G_VARIANT_TYPE ("(hiiiidddd)")
 
 PPS_PRIVATE
+int _pps_document_bytes_to_buffer (GBytes *bytes, GUnixFDList *fd_list, GError **error);
+PPS_PRIVATE
+GBytes *_pps_document_bytes_from_buffer (int handle, guint64 size, GUnixFDList *fd_list, GError **error);
+PPS_PRIVATE
+GVariant *_pps_document_surface_append_buffer (cairo_surface_t *surface, GUnixFDList *fd_list, GError **error);
+
+PPS_PRIVATE
 GVariant *_pps_document_surface_to_buffer (cairo_surface_t *surface,
                                            GUnixFDList **fd_list,
                                            GError **error);

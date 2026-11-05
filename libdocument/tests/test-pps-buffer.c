@@ -120,6 +120,65 @@ reject_mutable_file (void)
 	g_assert_no_error (error);
 	close (fd);
 	reject_buffer (g_variant_new ("(hiiiidddd)", handle, 0, 16, 8, 64, 1., 1., 0., 0.), fd_list);
+	g_autoptr (GBytes) bytes = _pps_document_bytes_from_buffer (handle, 512, fd_list, &error);
+	g_assert_null (bytes);
+	g_assert_error (error, G_IO_ERROR, G_IO_ERROR_INVALID_DATA);
+}
+
+static void
+bytes_and_image_batch (void)
+{
+	g_autoptr (GUnixFDList) descriptors = g_unix_fd_list_new ();
+	g_autoptr (GBytes) original = g_bytes_new_static ("a\0b\xff", 4);
+	g_autoptr (GBytes) empty = g_bytes_new_static (NULL, 0);
+	g_autoptr (GError) error = NULL;
+	int first = _pps_document_bytes_to_buffer (original, descriptors, &error);
+	g_assert_no_error (error);
+	int second = _pps_document_bytes_to_buffer (empty, descriptors, &error);
+	g_assert_no_error (error);
+	cairo_surface_t *surface = cairo_image_surface_create (CAIRO_FORMAT_ARGB32, 2, 2);
+	g_autoptr (GVariant) image = g_variant_ref_sink (_pps_document_surface_append_buffer (surface, descriptors, &error));
+	cairo_surface_destroy (surface);
+	g_assert_no_error (error);
+	g_assert_cmpint (g_unix_fd_list_get_length (descriptors), ==, 3);
+	g_assert_cmpint (first, ==, 0);
+	g_assert_cmpint (second, ==, 1);
+	g_autoptr (GBytes) copy = _pps_document_bytes_from_buffer (first, 4, descriptors, &error);
+	g_assert_no_error (error);
+	g_autoptr (GBytes) empty_copy = _pps_document_bytes_from_buffer (second, 0, descriptors, &error);
+	g_assert_no_error (error);
+	g_assert_cmpuint (g_bytes_get_size (empty_copy), ==, 0);
+	surface = _pps_document_surface_from_buffer (image, descriptors, &error);
+	g_assert_no_error (error);
+	g_assert_nonnull (surface);
+	g_assert_cmpint (cairo_image_surface_get_width (surface), ==, 2);
+	cairo_surface_destroy (surface);
+	g_clear_object (&descriptors);
+	/* Byte mappings, including empty payloads, outlive the descriptor batch. */
+	g_assert_true (g_bytes_equal (original, copy));
+	g_assert_true (g_bytes_equal (empty, empty_copy));
+}
+
+static void
+invalid_bytes (void)
+{
+	g_autoptr (GUnixFDList) descriptors = g_unix_fd_list_new ();
+	g_autoptr (GBytes) original = g_bytes_new_static ("data", 4);
+	g_autoptr (GError) error = NULL;
+	g_assert_cmpint (_pps_document_bytes_to_buffer (original, descriptors, &error), ==, 0);
+	g_assert_no_error (error);
+	const struct {
+		int handle;
+		guint64 size;
+	} invalid[] = { { -1, 4 }, { 1, 4 }, { 0, 0 }, { 0, 5 }, { 0, G_MAXUINT64 } };
+	for (guint i = 0; i < G_N_ELEMENTS (invalid); i++) {
+		g_autoptr (GBytes) bytes = _pps_document_bytes_from_buffer (invalid[i].handle, invalid[i].size, descriptors, &error);
+		g_assert_null (bytes);
+		g_assert_error (error, G_IO_ERROR, G_IO_ERROR_INVALID_DATA);
+		g_clear_error (&error);
+	}
+	g_assert_null (_pps_document_bytes_from_buffer (0, 4, NULL, &error));
+	g_assert_error (error, G_IO_ERROR, G_IO_ERROR_INVALID_DATA);
 }
 
 int
@@ -129,5 +188,7 @@ main (int argc, char **argv)
 	g_test_add_func ("/document-buffer/roundtrip", roundtrip);
 	g_test_add_func ("/document-buffer/invalid-metadata", invalid_metadata);
 	g_test_add_func ("/document-buffer/reject-mutable-file", reject_mutable_file);
+	g_test_add_func ("/document-buffer/bytes-and-image-batch", bytes_and_image_batch);
+	g_test_add_func ("/document-buffer/invalid-bytes", invalid_bytes);
 	return g_test_run ();
 }

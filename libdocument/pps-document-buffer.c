@@ -21,15 +21,87 @@ buffer_error (GError **error)
 	                     g_strerror (saved_errno));
 }
 
-GVariant *
-_pps_document_surface_to_buffer (cairo_surface_t *surface,
-                                 GUnixFDList **fd_list,
-                                 GError **error)
+static int
+append_data (const guint8 *data, gsize size, GUnixFDList *fd_list, GError **error)
 {
-	g_autoptr (GUnixFDList) descriptors = g_unix_fd_list_new ();
+	int fd, handle;
+	fd = memfd_create ("papers-buffer", MFD_CLOEXEC | MFD_ALLOW_SEALING);
+	if (fd == -1) {
+		buffer_error (error);
+		return -1;
+	}
+	for (gsize offset = 0; offset < size;) {
+		ssize_t count = write (fd, data + offset, size - offset);
+		if (count == -1 && errno == EINTR)
+			continue;
+		if (count <= 0) {
+			if (count == 0)
+				errno = EIO;
+			buffer_error (error);
+			close (fd);
+			return -1;
+		}
+		offset += count;
+	}
+	if (fcntl (fd, F_ADD_SEALS, F_SEAL_SHRINK | F_SEAL_GROW | F_SEAL_WRITE | F_SEAL_SEAL) == -1) {
+		buffer_error (error);
+		close (fd);
+		return -1;
+	}
+	handle = g_unix_fd_list_append (fd_list, fd, error);
+	close (fd);
+	if (handle == -1)
+		return -1;
+	return handle;
+}
+
+int
+_pps_document_bytes_to_buffer (GBytes *bytes, GUnixFDList *fd_list, GError **error)
+{
+	gsize size;
+	const guint8 *data = g_bytes_get_data (bytes, &size);
+	return append_data (data, size, fd_list, error);
+}
+
+static GMappedFile *
+map_buffer (int handle, guint64 size, GUnixFDList *fd_list, gboolean writable, GError **error)
+{
+	int fd, seals;
+	struct stat statbuf;
+	if (!fd_list || handle < 0 || handle >= g_unix_fd_list_get_length (fd_list) || size > G_MAXSIZE)
+		goto invalid;
+	fd = g_unix_fd_list_get (fd_list, handle, error);
+	if (fd == -1)
+		return NULL;
+	seals = fcntl (fd, F_GET_SEALS);
+	if (fstat (fd, &statbuf) == -1 || !S_ISREG (statbuf.st_mode) ||
+	    statbuf.st_size < 0 || (guint64) statbuf.st_size != size ||
+	    seals == -1 || (seals & (F_SEAL_SHRINK | F_SEAL_GROW | F_SEAL_WRITE)) != (F_SEAL_SHRINK | F_SEAL_GROW | F_SEAL_WRITE)) {
+		close (fd);
+		goto invalid;
+	}
+	GMappedFile *mapping = g_mapped_file_new_from_fd (fd, writable, error);
+	close (fd);
+	return mapping;
+invalid:
+	g_set_error_literal (error, G_IO_ERROR, G_IO_ERROR_INVALID_DATA, "Invalid sealed document buffer");
+	return NULL;
+}
+
+GBytes *
+_pps_document_bytes_from_buffer (int handle, guint64 size, GUnixFDList *fd_list, GError **error)
+{
+	g_autoptr (GMappedFile) mapping = map_buffer (handle, size, fd_list, FALSE, error);
+	return mapping ? g_mapped_file_get_bytes (mapping) : NULL;
+}
+
+GVariant *
+_pps_document_surface_append_buffer (cairo_surface_t *surface,
+                                     GUnixFDList *fd_list,
+                                     GError **error)
+{
 	cairo_status_t status = surface ? cairo_surface_status (surface) : CAIRO_STATUS_NULL_POINTER;
-	unsigned char *data;
-	int fd, handle, width, height, stride;
+	int handle, width, height, stride;
 	gsize size;
 	double sx, sy, ox, oy;
 
@@ -50,41 +122,25 @@ _pps_document_surface_to_buffer (cairo_surface_t *surface,
 		return NULL;
 	}
 	size = (gsize) stride * height;
-	fd = memfd_create ("papers-render", MFD_CLOEXEC | MFD_ALLOW_SEALING);
-	if (fd == -1) {
-		buffer_error (error);
-		return NULL;
-	}
 	cairo_surface_flush (surface);
-	data = cairo_image_surface_get_data (surface);
-	for (gsize offset = 0; offset < size;) {
-		ssize_t count = write (fd, data + offset, size - offset);
-		if (count == -1 && errno == EINTR)
-			continue;
-		if (count <= 0) {
-			if (count == 0)
-				errno = EIO;
-			buffer_error (error);
-			close (fd);
-			return NULL;
-		}
-		offset += count;
-	}
-	if (fcntl (fd, F_ADD_SEALS, F_SEAL_SHRINK | F_SEAL_GROW | F_SEAL_WRITE | F_SEAL_SEAL) == -1) {
-		buffer_error (error);
-		close (fd);
-		return NULL;
-	}
-	handle = g_unix_fd_list_append (descriptors, fd, error);
-	close (fd);
+	handle = append_data (cairo_image_surface_get_data (surface), size, fd_list, error);
 	if (handle == -1)
 		return NULL;
 	cairo_surface_get_device_scale (surface, &sx, &sy);
 	cairo_surface_get_device_offset (surface, &ox, &oy);
-	*fd_list = g_steal_pointer (&descriptors);
 	return g_variant_new ("(hiiiidddd)", handle,
 	                      cairo_image_surface_get_format (surface),
 	                      width, height, stride, sx, sy, ox, oy);
+}
+
+GVariant *
+_pps_document_surface_to_buffer (cairo_surface_t *surface, GUnixFDList **fd_list, GError **error)
+{
+	g_autoptr (GUnixFDList) descriptors = g_unix_fd_list_new ();
+	GVariant *buffer = _pps_document_surface_append_buffer (surface, descriptors, error);
+	if (buffer)
+		*fd_list = g_steal_pointer (&descriptors);
+	return buffer;
 }
 
 cairo_surface_t *
@@ -93,9 +149,8 @@ _pps_document_surface_from_buffer (GVariant *buffer,
                                    GError **error)
 {
 	g_autoptr (GMappedFile) mapping = NULL;
-	int handle, format, width, height, stride, minimum_stride, fd, seals;
+	int handle, format, width, height, stride, minimum_stride;
 	double sx, sy, ox, oy;
-	struct stat statbuf;
 	cairo_surface_t *surface;
 	cairo_status_t status;
 
@@ -113,18 +168,7 @@ _pps_document_surface_from_buffer (GVariant *buffer,
 	    !isfinite (ox) || !isfinite (oy))
 		goto invalid;
 
-	fd = g_unix_fd_list_get (fd_list, handle, error);
-	if (fd == -1)
-		return NULL;
-	seals = fcntl (fd, F_GET_SEALS);
-	if (fstat (fd, &statbuf) == -1 || !S_ISREG (statbuf.st_mode) ||
-	    statbuf.st_size < 0 || (guint64) statbuf.st_size != (guint64) stride * height ||
-	    seals == -1 || (seals & (F_SEAL_SHRINK | F_SEAL_GROW | F_SEAL_WRITE)) != (F_SEAL_SHRINK | F_SEAL_GROW | F_SEAL_WRITE)) {
-		close (fd);
-		goto invalid;
-	}
-	mapping = g_mapped_file_new_from_fd (fd, TRUE, error);
-	close (fd);
+	mapping = map_buffer (handle, (guint64) stride * height, fd_list, TRUE, error);
 	if (!mapping)
 		return NULL;
 

@@ -409,7 +409,7 @@ pps_document_model_set_document (PpsDocumentModel *model,
 
 	g_object_freeze_notify (G_OBJECT (model));
 
-	model->n_pages = pps_document_get_n_pages (document);
+	model->n_pages = document ? pps_document_get_n_pages (document) : 0;
 	pps_document_model_set_page (model, CLAMP (model->page, 0,
 	                                           model->n_pages - 1));
 

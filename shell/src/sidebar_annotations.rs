@@ -173,11 +173,9 @@ mod imp {
                 .child()
                 .and_downcast::<PpsSidebarAnnotationsRow>()
                 .unwrap();
-            let document = self
-                .obj()
-                .document_model()
-                .and_then(|m| m.document())
-                .unwrap();
+            let Some(document) = self.obj().document_model().and_then(|m| m.document()) else {
+                return;
+            };
             if let Some(annot) = item.item().and_downcast::<AnnotationMarkup>() {
                 row.set_document(document);
                 row.set_annotation(annot);

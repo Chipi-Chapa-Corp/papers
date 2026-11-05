@@ -16,7 +16,8 @@ static DOCUMENT_PRINT_SETTINGS: &[&glib::GStr] = &[
 
 impl imp::PpsDocumentView {
     pub(super) fn print_cancel(&self) {
-        for op in self.print_queue.borrow_mut().drain(..) {
+        let queue: Vec<_> = self.print_queue.borrow().iter().cloned().collect();
+        for op in queue {
             op.cancel();
         }
     }

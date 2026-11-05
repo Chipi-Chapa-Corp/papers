@@ -146,7 +146,9 @@ impl imp::PpsDocumentView {
             }
             "force-close" => {
                 self.close_after_print.set(true);
-                if !self.print_queue.borrow().is_empty() {
+                if self.print_queue.borrow().is_empty() {
+                    self.finish_close(true);
+                } else {
                     self.obj().set_sensitive(false);
                     self.print_cancel();
                 }

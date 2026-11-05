@@ -6,6 +6,20 @@
     <method name="GetSignatures">
       <arg name="signatures" type="aa{sv}" direction="out"/>
     </method>
+    <method name="GetSigningCertificates">
+      <arg name="certificates" type="aa{sv}" direction="out"/>
+    </method>
+    <method name="GetCertificateInfo">
+      <arg name="id" type="s" direction="in"/>
+      <arg name="present" type="b" direction="out"/>
+      <arg name="certificate" type="a{sv}" direction="out"/>
+    </method>
+    <method name="Sign">
+      <annotation name="org.gtk.GDBus.C.UnixFD" value="true"/>
+      <arg name="output" type="h" direction="in"/>
+      <arg name="cancellable" type="h" direction="in"/>
+      <arg name="data" type="a{sv}" direction="in"/>
+    </method>
     <method name="Create">
       <arg name="mime_type" type="s" direction="in"/>
       <arg name="interfaces" type="as" direction="out"/>
@@ -302,6 +316,13 @@
       <arg name="annotations" type="u" direction="in"/>
       <arg name="thumbnail" type="b" direction="in"/>
       <arg name="buffer" type="(hiiiidddd)" direction="out"/>
+    </method>
+  </interface>
+  <interface name="org.gnome.Papers.SignaturePasswords">
+    <method name="RequestPassword">
+      <arg name="name" type="s" direction="in"/>
+      <arg name="present" type="b" direction="out"/>
+      <arg name="password" type="s" direction="out"/>
     </method>
   </interface>
 </node>

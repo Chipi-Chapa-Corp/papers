@@ -8,6 +8,7 @@
 #include "pps-render-context.h"
 
 #define PPS_DOCUMENT_WORKER_PATH "/org/gnome/Papers/Document"
+#define PPS_SIGNATURE_PASSWORD_PATH "/org/gnome/Papers/SignaturePasswords"
 #define PPS_DOCUMENT_WORKER_FD 3
 
 typedef struct {

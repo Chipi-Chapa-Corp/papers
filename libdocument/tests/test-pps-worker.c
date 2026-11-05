@@ -205,6 +205,19 @@ reject_invalid_requests (void)
 	    session->proxy, G_DBUS_CALL_FLAGS_NONE, 5000, NULL, NULL, &error));
 	g_assert_error (error, G_IO_ERROR, G_IO_ERROR_NOT_INITIALIZED);
 	g_clear_error (&error);
+	g_assert_false (pps_dbus_document_call_get_signing_certificates_sync (
+	    session->proxy, G_DBUS_CALL_FLAGS_NONE, 5000, NULL, NULL, &error));
+	g_assert_error (error, G_IO_ERROR, G_IO_ERROR_NOT_INITIALIZED);
+	g_clear_error (&error);
+	g_assert_false (pps_dbus_document_call_get_certificate_info_sync (
+	    session->proxy, "signer", G_DBUS_CALL_FLAGS_NONE, 5000, NULL, NULL, NULL, &error));
+	g_assert_error (error, G_IO_ERROR, G_IO_ERROR_NOT_INITIALIZED);
+	g_clear_error (&error);
+	g_assert_false (pps_dbus_document_call_sign_sync (
+	    session->proxy, g_variant_new_handle (0), g_variant_new_handle (1), g_variant_new_array (G_VARIANT_TYPE ("{sv}"), NULL, 0),
+	    G_DBUS_CALL_FLAGS_NONE, 5000, NULL, NULL, NULL, &error));
+	g_assert_error (error, G_IO_ERROR, G_IO_ERROR_NOT_INITIALIZED);
+	g_clear_error (&error);
 	g_assert_cmpint (load (session, "missing.pdf", "", &error), ==, -1);
 	g_assert_nonnull (error);
 	g_clear_error (&error);

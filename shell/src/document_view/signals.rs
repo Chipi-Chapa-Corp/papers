@@ -279,8 +279,8 @@ impl imp::PpsDocumentView {
         // does, simply ignore it
         let file = self.file().unwrap();
         if file.uri() != uri {
-            application::spawn(
-                Some(&gio::File::for_uri(&uri)),
+            application::open_file(
+                &gio::File::for_uri(&uri),
                 action.dest().as_ref(),
                 Some(self.mode.get()),
             );
@@ -297,12 +297,10 @@ impl imp::PpsDocumentView {
         let target = path.with_file_name(filename);
 
         // The goto-remote action should not reference the file itself. If it
-        // does, simply ignore it. Ideally, we would not launch a new instance
-        // but open a new tab or a new window, but that's not possible until
-        // https://gitlab.gnome.org/GNOME/papers/-/issues/104 is fixed
+        // does, simply ignore it.
         if target != path {
-            application::spawn(
-                Some(&gio::File::for_path(target)),
+            application::open_file(
+                &gio::File::for_path(target),
                 action.dest().as_ref(),
                 Some(WindowRunMode::Normal),
             );

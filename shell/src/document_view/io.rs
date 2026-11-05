@@ -795,8 +795,8 @@ impl imp::PpsDocumentView {
                                 )
                                 .unwrap();
 
-                                crate::application::spawn(
-                                    Some(&gio::File::for_uri(&uri)),
+                                crate::application::open_file(
+                                    &gio::File::for_uri(&uri),
                                     None,
                                     None,
                                 );

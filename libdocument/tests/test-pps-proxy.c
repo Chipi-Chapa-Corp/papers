@@ -9,6 +9,8 @@
 #include <sys/wait.h>
 #include <unistd.h>
 
+#include "pps-attachment-private.h"
+#include "pps-document-annotation-private.h"
 #include "pps-document-proxy-private.h"
 #include "pps-document-security.h"
 #include "pps-form-field-private.h"
@@ -648,7 +650,7 @@ forms_isolation_and_errors (void)
 }
 
 static guint32
-page_color (PpsDocument *document)
+pixel_color (PpsDocument *document, int x, int y)
 {
 	g_autoptr (PpsPage) page = pps_document_get_page (document, 0);
 	g_autoptr (PpsRenderContext) context = pps_render_context_new (page, 0, 1, PPS_RENDER_ANNOTS_ALL);
@@ -656,9 +658,15 @@ page_color (PpsDocument *document)
 	g_assert_nonnull (surface);
 	cairo_surface_flush (surface);
 	guint32 pixel;
-	memcpy (&pixel, cairo_image_surface_get_data (surface) + 50 * cairo_image_surface_get_stride (surface) + 50 * 4, 4);
+	memcpy (&pixel, cairo_image_surface_get_data (surface) + y * cairo_image_surface_get_stride (surface) + x * 4, 4);
 	cairo_surface_destroy (surface);
 	return pixel & 0xffffff;
+}
+
+static guint32
+page_color (PpsDocument *document)
+{
+	return pixel_color (document, 50, 50);
 }
 
 static void
@@ -855,6 +863,320 @@ create_fixture (void)
 	cairo_surface_destroy (surface);
 }
 
+static PpsAnnotation *
+find_annotation (GList *annotations, PpsAnnotationType type)
+{
+	for (GList *item = annotations; item; item = item->next)
+		if (pps_annotation_get_annotation_type (item->data) == type)
+			return item->data;
+	g_error ("Missing annotation type %u", type);
+}
+
+static void
+annotations_edit_and_save (void)
+{
+	g_autoptr (PpsDocument) document = new_document ();
+	load_document (document, fixture_uri);
+	PpsDocumentAnnotations *annotations = PPS_DOCUMENT_ANNOTATIONS (document);
+	g_assert_true (pps_document_annotations_can_add_annotation (annotations));
+	g_assert_true (pps_document_annotations_can_remove_annotation (annotations));
+	g_autoptr (PpsPage) page = pps_document_get_page (document, 0);
+	g_assert_null (pps_document_annotations_get_annotations (annotations, page));
+	g_autoptr (PpsAnnotation) note = pps_annotation_text_new (page);
+	PpsRectangle area = { 15, 15, 39, 39 };
+	pps_annotation_set_area (note, &area);
+	pps_annotation_markup_set_label (PPS_ANNOTATION_MARKUP (note), "Author α");
+	pps_document_annotations_add_annotation (annotations, note);
+	guint64 id = _pps_document_objects_get_id (_pps_document_proxy_get_objects (document), G_OBJECT (note));
+	g_assert_cmpuint (id, !=, 0);
+	g_assert_nonnull (pps_annotation_get_name (note));
+	g_assert_true (pps_document_get_modified (document));
+	g_assert_true (pps_document_annotations_document_is_modified (annotations));
+	pps_annotation_set_contents (note, "Edited note α");
+	pps_annotation_text_set_icon (PPS_ANNOTATION_TEXT (note), PPS_ANNOTATION_TEXT_ICON_COMMENT);
+	GdkRGBA color = { .2, .4, .8, 1. };
+	pps_annotation_set_rgba (note, &color);
+	pps_annotation_markup_set_opacity (PPS_ANNOTATION_MARKUP (note), .6);
+	g_autolist (PpsAnnotation) first_view = pps_document_annotations_get_annotations (annotations, page);
+	g_assert_cmpuint (g_list_length (first_view), ==, 1);
+	PpsAnnotation *copy = first_view->data;
+	g_assert_true (copy != note);
+	g_assert_cmpuint (_pps_document_objects_get_id (_pps_document_proxy_get_objects (document), G_OBJECT (copy)), ==, id);
+	g_assert_cmpstr (pps_annotation_get_contents (copy), ==, "Edited note α");
+	pps_annotation_set_contents (copy, "Second view");
+	/* Independent wrappers retain per-view state; a fresh read sees the backend edit. */
+	g_assert_cmpstr (pps_annotation_get_contents (note), ==, "Edited note α");
+	g_autolist (PpsAnnotation) updated = pps_document_annotations_get_annotations (annotations, page);
+	g_assert_cmpstr (pps_annotation_get_contents (updated->data), ==, "Second view");
+	g_autoptr (PpsAnnotation) highlight = pps_annotation_text_markup_highlight_new (page);
+	PpsRectangle text_area = { 10, 14, 100, 34 };
+	pps_annotation_set_area (highlight, &text_area);
+	pps_annotation_set_rgba (highlight, &color);
+	pps_document_annotations_add_annotation (annotations, highlight);
+	pps_annotation_set_contents (highlight, "Highlighted text");
+	PpsRectangle normalized;
+	pps_annotation_get_area (highlight, &normalized);
+	g_assert_cmpint (pps_document_annotations_over_markup (annotations, highlight,
+	                                                       (normalized.x1 + normalized.x2) / 2, (normalized.y1 + normalized.y2) / 2),
+	                 ==, PPS_ANNOTATION_OVER_MARKUP_YES);
+	g_assert_cmpint (pps_document_annotations_over_markup (annotations, highlight, 140, 280), ==, PPS_ANNOTATION_OVER_MARKUP_NOT);
+	pps_document_annotations_remove_annotation (annotations, note);
+	g_autolist (PpsAnnotation) removed = pps_document_annotations_get_annotations (annotations, page);
+	g_assert_cmpuint (g_list_length (removed), ==, 1);
+	pps_annotation_set_contents (note, "Edited while removed");
+	pps_document_annotations_add_annotation (annotations, note);
+	g_assert_cmpuint (_pps_document_objects_get_id (_pps_document_proxy_get_objects (document), G_OBJECT (note)), ==, id);
+	pps_annotation_set_contents (note, "Redo note");
+	pps_annotation_set_contents (copy, "Other view after redo");
+	g_autofree char *saved_path = g_build_filename (fixture_dir, "annotations-saved.pdf", NULL);
+	g_autofree char *saved_uri = g_filename_to_uri (saved_path, NULL, NULL);
+	g_autoptr (GError) error = NULL;
+	g_assert_true (pps_document_save (document, saved_uri, &error));
+	g_assert_no_error (error);
+	g_assert_false (pps_document_get_modified (document));
+	g_assert_false (pps_document_annotations_document_is_modified (annotations));
+	g_autoptr (PpsDocument) saved = new_document ();
+	load_document (saved, saved_uri);
+	g_autoptr (PpsPage) saved_page = pps_document_get_page (saved, 0);
+	g_autolist (PpsAnnotation) saved_annotations = pps_document_annotations_get_annotations (PPS_DOCUMENT_ANNOTATIONS (saved), saved_page);
+	g_assert_cmpuint (g_list_length (saved_annotations), ==, 2);
+	g_assert_cmpstr (pps_annotation_get_contents (find_annotation (saved_annotations, PPS_ANNOTATION_TYPE_TEXT)), ==, "Other view after redo");
+	g_assert_cmpstr (pps_annotation_get_contents (find_annotation (saved_annotations, PPS_ANNOTATION_TYPE_TEXT_MARKUP)), ==, "Highlighted text");
+	render_page (saved, 0);
+	g_assert_cmpint (g_unlink (saved_path), ==, 0);
+}
+
+static void
+annotation_ink_stamp_and_fonts (void)
+{
+	g_autoptr (PpsDocument) document = new_document ();
+	load_document (document, fixture_uri);
+	PpsDocumentAnnotations *annotations = PPS_DOCUMENT_ANNOTATIONS (document);
+	g_autoptr (PpsPage) page = pps_document_get_page (document, 0);
+	PpsRectangle area = { 10, 115, 120, 150 };
+	g_autoptr (PpsAnnotation) text = pps_annotation_free_text_new (page);
+	g_autoptr (PangoFontDescription) font = pango_font_description_from_string ("Sans Bold 14");
+	GdkRGBA color = { .2, .3, .8, 1. };
+	pps_annotation_set_area (text, &area);
+	pps_annotation_set_contents (text, "Free text");
+	pps_annotation_free_text_set_font_description (PPS_ANNOTATION_FREE_TEXT (text), font);
+	pps_annotation_free_text_set_font_rgba (PPS_ANNOTATION_FREE_TEXT (text), &color);
+	pps_document_annotations_add_annotation (annotations, text);
+	pps_annotation_set_contents (text, "Changed free text");
+	pango_font_description_set_size (font, 18 * PANGO_SCALE);
+	pps_annotation_free_text_set_font_description (PPS_ANNOTATION_FREE_TEXT (text), font);
+	g_autoptr (PpsAnnotation) ink = pps_annotation_ink_new (page);
+	PpsPoint points[] = { { 20, 160 }, { 40, 180 }, { 60, 160 } };
+	PpsPath path = { points, 3 };
+	pps_annotation_ink_set_ink_list (PPS_ANNOTATION_INK (ink), pps_ink_list_new_for_array ((const PpsPath *[]){ &path }, 1));
+	pps_annotation_set_border_width (ink, 2);
+	pps_annotation_set_rgba (ink, &color);
+	pps_document_annotations_add_annotation (annotations, ink);
+	points[1].y = 190;
+	pps_annotation_ink_set_ink_list (PPS_ANNOTATION_INK (ink), pps_ink_list_new_for_array ((const PpsPath *[]){ &path }, 1));
+	g_autoptr (PpsAnnotation) stamp = pps_annotation_stamp_new (page);
+	cairo_surface_t *surface = cairo_image_surface_create (CAIRO_FORMAT_ARGB32, 8, 8);
+	cairo_t *cr = cairo_create (surface);
+	cairo_set_source_rgb (cr, 1, 0, 0);
+	cairo_paint (cr);
+	cairo_destroy (cr);
+	pps_annotation_stamp_set_surface (PPS_ANNOTATION_STAMP (stamp), surface);
+	cairo_surface_destroy (surface);
+	area = (PpsRectangle){ 80, 160, 120, 200 };
+	pps_annotation_set_area (stamp, &area);
+	pps_document_annotations_add_annotation (annotations, stamp);
+	g_assert_cmphex (pixel_color (document, 100, 180), ==, 0xff0000);
+	pps_document_annotations_remove_annotation (annotations, stamp);
+	pps_document_annotations_add_annotation (annotations, stamp);
+	g_assert_cmphex (pixel_color (document, 100, 180), ==, 0xff0000);
+	g_autofree char *saved_path = g_build_filename (fixture_dir, "annotation-types.pdf", NULL);
+	g_autofree char *saved_uri = g_filename_to_uri (saved_path, NULL, NULL);
+	g_autoptr (GError) error = NULL;
+	g_assert_true (pps_document_save (document, saved_uri, &error));
+	g_assert_no_error (error);
+	g_autoptr (PpsDocument) saved = new_document ();
+	load_document (saved, saved_uri);
+	g_autoptr (PpsPage) saved_page = pps_document_get_page (saved, 0);
+	g_autolist (PpsAnnotation) list = pps_document_annotations_get_annotations (PPS_DOCUMENT_ANNOTATIONS (saved), saved_page);
+	g_assert_cmpuint (g_list_length (list), ==, 3);
+	PpsAnnotation *saved_text = find_annotation (list, PPS_ANNOTATION_TYPE_FREE_TEXT);
+	g_assert_cmpstr (pps_annotation_get_contents (saved_text), ==, "Changed free text");
+	g_autoptr (PangoFontDescription) saved_font = pps_annotation_free_text_get_font_description (PPS_ANNOTATION_FREE_TEXT (saved_text));
+	g_assert_cmpint (pango_font_description_get_size (saved_font), ==, 18 * PANGO_SCALE);
+	PpsInkList *saved_ink = pps_annotation_ink_get_ink_list (PPS_ANNOTATION_INK (find_annotation (list, PPS_ANNOTATION_TYPE_INK)));
+	g_assert_cmpuint (saved_ink->n_paths, ==, 1);
+	g_assert_cmpfloat (saved_ink->paths[0]->points[1].y, ==, 190);
+	g_assert_nonnull (find_annotation (list, PPS_ANNOTATION_TYPE_STAMP));
+	render_page (saved, 0);
+	g_assert_cmphex (pixel_color (saved, 100, 180), ==, 0xff0000);
+	g_assert_cmpint (g_unlink (saved_path), ==, 0);
+}
+
+static void
+annotation_capabilities (void)
+{
+	const char *interfaces[] = { "PpsDocumentAnnotations", NULL };
+	GType read_only = _pps_document_proxy_type_for_interfaces (interfaces, 0);
+	GType editable = _pps_document_proxy_type_for_interfaces (interfaces, PPS_ANNOTATION_METHOD_ADD | PPS_ANNOTATION_METHOD_REMOVE);
+	g_assert_cmpuint (read_only, !=, editable);
+	g_autoptr (PpsDocument) read_document = g_object_new (read_only, NULL);
+	g_autoptr (PpsDocument) edit_document = g_object_new (editable, NULL);
+	g_assert_false (pps_document_annotations_can_add_annotation (PPS_DOCUMENT_ANNOTATIONS (read_document)));
+	g_assert_false (pps_document_annotations_can_remove_annotation (PPS_DOCUMENT_ANNOTATIONS (read_document)));
+	g_assert_true (pps_document_annotations_can_add_annotation (PPS_DOCUMENT_ANNOTATIONS (edit_document)));
+	g_assert_true (pps_document_annotations_can_remove_annotation (PPS_DOCUMENT_ANNOTATIONS (edit_document)));
+	g_assert_cmpint (pps_document_annotations_over_markup (PPS_DOCUMENT_ANNOTATIONS (read_document), NULL, 0, 0),
+	                 ==, PPS_ANNOTATION_OVER_MARKUP_NOT_IMPLEMENTED);
+}
+
+static void
+annotation_scope_and_errors (void)
+{
+	g_autoptr (PpsDocument) first = new_document ();
+	g_autoptr (PpsDocument) second = new_document ();
+	load_document (first, fixture_uri);
+	load_document (second, fixture_uri);
+	g_autoptr (PpsPage) page = pps_document_get_page (first, 0);
+	g_autoptr (PpsAnnotation) note = pps_annotation_text_new (page);
+	pps_annotation_set_area (note, &(PpsRectangle){ 10, 10, 34, 34 });
+	pps_document_annotations_add_annotation (PPS_DOCUMENT_ANNOTATIONS (first), note);
+	pps_annotation_set_contents (note, "First document");
+	pps_document_annotations_add_annotation (PPS_DOCUMENT_ANNOTATIONS (second), note);
+	pps_document_annotations_remove_annotation (PPS_DOCUMENT_ANNOTATIONS (second), note);
+	g_assert_false (pps_document_get_modified (second));
+	g_assert_null (pps_document_annotations_get_annotations (PPS_DOCUMENT_ANNOTATIONS (second), page));
+	PpsDocumentSession *session = _pps_document_proxy_get_session (first);
+	guint64 id = _pps_document_objects_get_id (_pps_document_proxy_get_objects (first), G_OBJECT (note));
+	g_autoptr (GError) error = NULL;
+	guint state;
+	g_assert_false (pps_dbus_document_call_remove_annotation_sync (session->proxy, G_MAXUINT64,
+	                                                               G_DBUS_CALL_FLAGS_NONE, 5000, &state, NULL, &error));
+	g_assert_error (error, G_IO_ERROR, G_IO_ERROR_INVALID_ARGUMENT);
+	g_clear_error (&error);
+	g_autoptr (GVariant) invalid = g_variant_ref_sink (g_variant_new_variant (g_variant_new_double (NAN)));
+	g_assert_false (pps_dbus_document_call_set_annotation_property_sync (session->proxy, id, "border-width", invalid,
+	                                                                     G_DBUS_CALL_FLAGS_NONE, 5000, NULL, &state, NULL, NULL, &error));
+	g_assert_error (error, G_IO_ERROR, G_IO_ERROR_INVALID_DATA);
+	g_clear_error (&error);
+	guint hit;
+	g_assert_false (pps_dbus_document_call_over_annotation_markup_sync (session->proxy, id, NAN, 0,
+	                                                                    G_DBUS_CALL_FLAGS_NONE, 5000, &hit, NULL, &error));
+	g_assert_error (error, G_IO_ERROR, G_IO_ERROR_INVALID_ARGUMENT);
+	g_clear_error (&error);
+	g_autoptr (GVariant) values = NULL;
+	guint64 missing_id = G_MAXUINT64;
+	g_autoptr (GVariant) missing = g_variant_ref_sink (g_variant_new_fixed_array (G_VARIANT_TYPE_UINT64, &missing_id, 1, sizeof missing_id));
+	g_assert_false (pps_dbus_document_call_get_annotations_sync (session->proxy, 0, missing,
+	                                                             G_DBUS_CALL_FLAGS_NONE, 5000, NULL, &values, NULL, NULL, &error));
+	g_assert_error (error, G_IO_ERROR, G_IO_ERROR_INVALID_ARGUMENT);
+	g_clear_error (&error);
+	pid_t pid = g_ascii_strtoll (g_subprocess_get_identifier (session->process), NULL, 10);
+	g_subprocess_send_signal (session->process, SIGSTOP);
+	siginfo_t status;
+	g_assert_cmpint (waitid (P_PID, pid, &status, WSTOPPED | WNOWAIT), ==, 0);
+	gboolean dirty = pps_document_annotations_document_is_modified (PPS_DOCUMENT_ANNOTATIONS (first));
+	g_subprocess_send_signal (session->process, SIGCONT);
+	g_assert_true (dirty);
+	pps_document_annotations_remove_annotation (PPS_DOCUMENT_ANNOTATIONS (first), note);
+	g_assert_false (pps_dbus_document_call_remove_annotation_sync (session->proxy, id,
+	                                                               G_DBUS_CALL_FLAGS_NONE, 5000, &state, NULL, &error));
+	g_assert_error (error, G_IO_ERROR, G_IO_ERROR_INVALID_ARGUMENT);
+	g_clear_error (&error);
+	pps_document_annotations_add_annotation (PPS_DOCUMENT_ANNOTATIONS (first), note);
+	g_autolist (PpsAnnotation) list = pps_document_annotations_get_annotations (PPS_DOCUMENT_ANNOTATIONS (first), page);
+	g_assert_cmpuint (g_list_length (list), ==, 1);
+	render_page (second, 0);
+	/* A surviving wrapper's weak document connection must be harmless. */
+	g_clear_object (&first);
+	pps_annotation_set_contents (note, "Document closed");
+}
+
+static void
+annotation_attachment_batches (void)
+{
+	const guint count = 33;
+	g_autoptr (GString) references = g_string_new (NULL);
+	for (guint i = 0; i < count; i++)
+		g_string_append_printf (references, "%u 0 R ", 7 + i);
+	g_autoptr (GPtrArray) objects = g_ptr_array_new_with_free_func (g_free);
+	g_ptr_array_add (objects, g_strdup ("<< /Type /Catalog /Pages 2 0 R >>"));
+	g_ptr_array_add (objects, g_strdup ("<< /Type /Pages /Count 1 /Kids [3 0 R] >>"));
+	g_ptr_array_add (objects, g_strdup_printf ("<< /Type /Page /Parent 2 0 R /MediaBox [0 0 100 100] /Resources << >> /Contents 4 0 R /Annots [%s] >>", references->str));
+	g_ptr_array_add (objects, g_strdup ("<< /Length 0 >>\nstream\nendstream"));
+	g_ptr_array_add (objects, g_strdup ("<< /Type /EmbeddedFile /Filter /ASCIIHexDecode /Length 5 >>\nstream\n6162>\nendstream"));
+	g_ptr_array_add (objects, g_strdup ("<< /Type /Filespec /F (embedded.txt) /Desc (Annotation payload) /EF << /F 5 0 R >> >>"));
+	for (guint i = 0; i < count; i++)
+		g_ptr_array_add (objects, g_strdup_printf ("<< /Type /Annot /Subtype /FileAttachment /Rect [10 10 30 30] /FS 6 0 R /NM (attachment%u) /Contents (Attached) >>", i));
+	g_autofree char *path = write_pdf_fixture ("attachment-annotations.pdf", (const char *const *) objects->pdata, objects->len);
+	g_autofree char *uri = g_filename_to_uri (path, NULL, NULL);
+	g_autoptr (PpsDocument) document = new_document ();
+	load_document (document, uri);
+	g_autoptr (PpsPage) page = pps_document_get_page (document, 0);
+	g_autolist (PpsAnnotation) annotations = pps_document_annotations_get_annotations (PPS_DOCUMENT_ANNOTATIONS (document), page);
+	g_assert_cmpuint (g_list_length (annotations), ==, count);
+	g_autolist (PpsAnnotation) again = pps_document_annotations_get_annotations (PPS_DOCUMENT_ANNOTATIONS (document), page);
+	g_assert_cmpuint (g_list_length (again), ==, count);
+	g_assert_true (annotations->data != again->data);
+	g_assert_cmpuint (_pps_document_objects_get_id (_pps_document_proxy_get_objects (document), annotations->data), ==,
+	                  _pps_document_objects_get_id (_pps_document_proxy_get_objects (document), again->data));
+	PpsDocumentSession *session = _pps_document_proxy_get_session (document);
+	g_autoptr (GError) error = NULL;
+	g_autoptr (GVariant) handles = NULL;
+	g_assert_true (pps_dbus_document_call_list_annotations_sync (session->proxy, 0,
+	                                                             G_DBUS_CALL_FLAGS_NONE, 5000, &handles, NULL, &error));
+	g_assert_no_error (error);
+	g_assert_cmpuint (g_variant_n_children (handles), ==, count);
+	for (guint offset = 0; offset < count; offset += PPS_DOCUMENT_BUFFER_BATCH_SIZE) {
+		/* Membership changes between batches must not shift the original handle list. */
+		if (offset == PPS_DOCUMENT_BUFFER_BATCH_SIZE) {
+			pps_document_annotations_remove_annotation (PPS_DOCUMENT_ANNOTATIONS (document), g_list_nth_data (annotations, offset));
+			g_autoptr (PpsAnnotation) note = pps_annotation_text_new (page);
+			pps_annotation_set_area (note, &(PpsRectangle){ 10, 10, 34, 34 });
+			pps_document_annotations_add_annotation (PPS_DOCUMENT_ANNOTATIONS (document), note);
+		}
+		guint batch_size = MIN (PPS_DOCUMENT_BUFFER_BATCH_SIZE, count - offset);
+		GVariantBuilder builder;
+		g_variant_builder_init (&builder, G_VARIANT_TYPE ("at"));
+		for (guint i = 0; i < batch_size; i++) {
+			guint64 id;
+			g_variant_get_child (handles, offset + i, "t", &id);
+			g_variant_builder_add (&builder, "t", id);
+		}
+		g_autoptr (GVariant) batch = g_variant_ref_sink (g_variant_builder_end (&builder));
+		g_autoptr (GVariant) values = NULL;
+		g_autoptr (GUnixFDList) descriptors = NULL;
+		g_assert_true (pps_dbus_document_call_get_annotations_sync (session->proxy, 0, batch,
+		                                                            G_DBUS_CALL_FLAGS_NONE, 5000, NULL, &values, &descriptors, NULL, &error));
+		g_assert_no_error (error);
+		g_assert_cmpuint (g_variant_n_children (values), ==, batch_size);
+		g_assert_cmpint (g_unix_fd_list_get_length (descriptors), ==, batch_size);
+		for (guint i = 0; i < batch_size; i++) {
+			guint64 id, expected;
+			g_autoptr (GVariant) value = NULL;
+			g_variant_get_child (values, i, "(t@a{sv})", &id, &value);
+			g_variant_get_child (handles, offset + i, "t", &expected);
+			g_assert_cmpuint (id, ==, expected);
+			g_autoptr (PpsAnnotation) annotation = _pps_annotation_from_variant (value, page, descriptors, &error);
+			g_assert_no_error (error);
+			g_assert_true (PPS_IS_ANNOTATION_ATTACHMENT (annotation));
+			g_autofree char *name = g_strdup_printf ("attachment%u", offset + i);
+			g_assert_cmpstr (pps_annotation_get_name (annotation), ==, name);
+		}
+	}
+	g_autolist (PpsAnnotation) changed = pps_document_annotations_get_annotations (PPS_DOCUMENT_ANNOTATIONS (document), page);
+	g_assert_cmpuint (g_list_length (changed), ==, count);
+	g_assert_true (PPS_IS_ANNOTATION_TEXT (g_list_last (changed)->data));
+	g_clear_object (&document);
+	for (GList *item = annotations; item; item = item->next) {
+		g_assert_true (PPS_IS_ANNOTATION_ATTACHMENT (item->data));
+		PpsAttachment *attachment = pps_annotation_attachment_get_attachment (PPS_ANNOTATION_ATTACHMENT (item->data));
+		g_assert_cmpstr (pps_attachment_get_name (attachment), ==, "embedded.txt");
+		g_autoptr (GBytes) bytes = _pps_attachment_get_data (attachment);
+		g_assert_cmpmem (g_bytes_get_data (bytes, NULL), g_bytes_get_size (bytes), "ab", 2);
+	}
+	g_assert_cmpint (g_unlink (path), ==, 0);
+}
+
 int
 main (int argc, char **argv)
 {
@@ -872,6 +1194,11 @@ main (int argc, char **argv)
 	g_test_add_func ("/document-proxy/forms-isolation-and-errors", forms_isolation_and_errors);
 	g_test_add_func ("/document-proxy/embedded-attachments", embedded_attachments);
 	g_test_add_func ("/document-proxy/attachment-batches", attachment_batches);
+	g_test_add_func ("/document-proxy/annotations-edit-and-save", annotations_edit_and_save);
+	g_test_add_func ("/document-proxy/annotation-ink-stamp-and-fonts", annotation_ink_stamp_and_fonts);
+	g_test_add_func ("/document-proxy/annotation-capabilities", annotation_capabilities);
+	g_test_add_func ("/document-proxy/annotation-scope-and-errors", annotation_scope_and_errors);
+	g_test_add_func ("/document-proxy/annotation-attachment-batches", annotation_attachment_batches);
 	int result = g_test_run ();
 	g_unlink (fixture_path);
 	g_rmdir (fixture_dir);

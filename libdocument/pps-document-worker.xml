@@ -39,6 +39,12 @@
       <arg name="present" type="b" direction="out"/>
       <arg name="rows" type="a(iba{sv})" direction="out"/>
     </method>
+    <method name="GetAttachments">
+      <annotation name="org.gtk.GDBus.C.UnixFD" value="true"/>
+      <arg name="start" type="u" direction="in"/>
+      <arg name="more" type="b" direction="out"/>
+      <arg name="attachments" type="aa{sv}" direction="out"/>
+    </method>
     <method name="GetLinks">
       <arg name="page" type="i" direction="in"/>
       <arg name="present" type="b" direction="out"/>

@@ -253,6 +253,7 @@ document_worker = executable(
   'pps-document-worker-selection.c',
   'pps-document-worker-links.c',
   'pps-document-worker-forms.c',
+  'pps-document-worker-attachments.c',
   document_dbus[1],
   include_directories: top_inc,
   dependencies: libppsdocument_dep,

@@ -3,6 +3,7 @@
 #pragma once
 
 #include <cairo.h>
+#include <gdk-pixbuf/gdk-pixbuf.h>
 #include <gio/gunixfdlist.h>
 
 #include "pps-macros.h"
@@ -30,3 +31,11 @@ PPS_PRIVATE
 cairo_surface_t *_pps_document_surface_from_buffer (GVariant *buffer,
                                                     GUnixFDList *fd_list,
                                                     GError **error);
+
+/* (handle, width, height, rowstride, has-alpha), with unmodified RGB(A) bytes. */
+#define PPS_DOCUMENT_PIXBUF_BUFFER_TYPE G_VARIANT_TYPE ("(hiiib)")
+
+PPS_PRIVATE
+GVariant *_pps_document_pixbuf_to_buffer (GdkPixbuf *pixbuf, GUnixFDList **fd_list, GError **error);
+PPS_PRIVATE
+GdkPixbuf *_pps_document_pixbuf_from_buffer (GVariant *buffer, GUnixFDList *fd_list, GError **error);

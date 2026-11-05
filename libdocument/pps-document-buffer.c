@@ -196,3 +196,40 @@ invalid:
 	                     "Invalid rendered surface buffer");
 	return NULL;
 }
+
+GVariant *
+_pps_document_pixbuf_to_buffer (GdkPixbuf *pixbuf, GUnixFDList **fd_list, GError **error)
+{
+	if (!pixbuf || gdk_pixbuf_get_colorspace (pixbuf) != GDK_COLORSPACE_RGB || gdk_pixbuf_get_bits_per_sample (pixbuf) != 8) {
+		g_set_error_literal (error, G_IO_ERROR, G_IO_ERROR_NOT_SUPPORTED, "Cannot transfer document image format");
+		return NULL;
+	}
+	g_autoptr (GUnixFDList) descriptors = g_unix_fd_list_new ();
+	int handle = append_data (gdk_pixbuf_read_pixels (pixbuf), gdk_pixbuf_get_byte_length (pixbuf), descriptors, error);
+	if (handle == -1)
+		return NULL;
+	*fd_list = g_steal_pointer (&descriptors);
+	return g_variant_new ("(hiiib)", handle, gdk_pixbuf_get_width (pixbuf), gdk_pixbuf_get_height (pixbuf),
+	                      gdk_pixbuf_get_rowstride (pixbuf), gdk_pixbuf_get_has_alpha (pixbuf));
+}
+
+GdkPixbuf *
+_pps_document_pixbuf_from_buffer (GVariant *buffer, GUnixFDList *fd_list, GError **error)
+{
+	g_autoptr (GBytes) bytes = NULL;
+	int handle, width, height, stride;
+	gboolean alpha;
+	if (!buffer || !g_variant_is_of_type (buffer, PPS_DOCUMENT_PIXBUF_BUFFER_TYPE))
+		goto invalid;
+	g_variant_get (buffer, "(hiiib)", &handle, &width, &height, &stride, &alpha);
+	int channels = alpha ? 4 : 3;
+	if (width <= 0 || height <= 0 || width > G_MAXINT / channels || stride < width * channels)
+		goto invalid;
+	/* Pixbuf storage need not include the last row's padding. */
+	guint64 size = (guint64) (height - 1) * stride + (guint64) width * channels;
+	bytes = _pps_document_bytes_from_buffer (handle, size, fd_list, error);
+	return bytes ? gdk_pixbuf_new_from_bytes (bytes, GDK_COLORSPACE_RGB, alpha, 8, width, height, stride) : NULL;
+invalid:
+	g_set_error_literal (error, G_IO_ERROR, G_IO_ERROR_INVALID_DATA, "Invalid document image buffer");
+	return NULL;
+}

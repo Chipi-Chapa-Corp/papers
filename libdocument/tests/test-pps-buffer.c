@@ -181,6 +181,71 @@ invalid_bytes (void)
 	g_assert_error (error, G_IO_ERROR, G_IO_ERROR_INVALID_DATA);
 }
 
+static void
+pixbuf_roundtrip (void)
+{
+	for (guint alpha = 0; alpha <= 1; alpha++) {
+		g_autoptr (GdkPixbuf) original = gdk_pixbuf_new (GDK_COLORSPACE_RGB, alpha, 8, 3, 2);
+		gdk_pixbuf_fill (original, 0x2793df80);
+		gsize size = gdk_pixbuf_get_byte_length (original);
+		g_autoptr (GUnixFDList) descriptors = NULL;
+		g_autoptr (GError) error = NULL;
+		g_autoptr (GVariant) buffer = g_variant_ref_sink (_pps_document_pixbuf_to_buffer (original, &descriptors, &error));
+		g_assert_no_error (error);
+		g_autoptr (GdkPixbuf) first = _pps_document_pixbuf_from_buffer (buffer, descriptors, &error);
+		g_assert_no_error (error);
+		g_assert_nonnull (first);
+		g_assert_cmpint (gdk_pixbuf_get_has_alpha (first), ==, alpha);
+		g_assert_cmpint (gdk_pixbuf_get_rowstride (first), ==, gdk_pixbuf_get_rowstride (original));
+		g_assert_cmpuint (gdk_pixbuf_get_byte_length (first), ==, size);
+		g_assert_cmpmem (gdk_pixbuf_read_pixels (first), size, gdk_pixbuf_read_pixels (original), size);
+		gdk_pixbuf_get_pixels (first)[0] ^= 0xff;
+		g_autoptr (GdkPixbuf) second = _pps_document_pixbuf_from_buffer (buffer, descriptors, &error);
+		g_assert_no_error (error);
+		g_clear_object (&descriptors);
+		g_assert_cmpmem (gdk_pixbuf_read_pixels (second), size, gdk_pixbuf_read_pixels (original), size);
+		g_clear_object (&original);
+		g_assert_cmphex (gdk_pixbuf_read_pixels (second)[0], ==, 0x27);
+	}
+}
+
+static void
+invalid_pixbuf (void)
+{
+	g_autoptr (GdkPixbuf) pixbuf = gdk_pixbuf_new (GDK_COLORSPACE_RGB, TRUE, 8, 3, 2);
+	g_autoptr (GUnixFDList) descriptors = NULL;
+	g_autoptr (GError) error = NULL;
+	g_autoptr (GVariant) original = g_variant_ref_sink (_pps_document_pixbuf_to_buffer (pixbuf, &descriptors, &error));
+	g_assert_no_error (error);
+	const struct {
+		int handle, width, height, stride;
+	} invalid[] = {
+		{ 0, 0, 2, 12 },
+		{ 0, -1, 2, 12 },
+		{ 0, 3, 0, 12 },
+		{ 0, 3, -1, 12 },
+		{ 0, 3, 2, 11 },
+		{ 0, 3, 3, 12 },
+		{ 0, G_MAXINT, 2, 12 },
+		{ -1, 3, 2, 12 },
+		{ 1, 3, 2, 12 },
+	};
+	for (guint i = 0; i < G_N_ELEMENTS (invalid); i++) {
+		g_autoptr (GVariant) value = g_variant_ref_sink (g_variant_new ("(hiiib)", invalid[i].handle, invalid[i].width,
+		                                                                invalid[i].height, invalid[i].stride, TRUE));
+		g_autoptr (GdkPixbuf) copy = _pps_document_pixbuf_from_buffer (value, descriptors, &error);
+		g_assert_null (copy);
+		g_assert_error (error, G_IO_ERROR, G_IO_ERROR_INVALID_DATA);
+		g_clear_error (&error);
+	}
+	g_assert_null (_pps_document_pixbuf_from_buffer (original, NULL, &error));
+	g_assert_error (error, G_IO_ERROR, G_IO_ERROR_INVALID_DATA);
+	g_clear_error (&error);
+	g_autoptr (GVariant) wrong_type = g_variant_ref_sink (g_variant_new_int32 (0));
+	g_assert_null (_pps_document_pixbuf_from_buffer (wrong_type, descriptors, &error));
+	g_assert_error (error, G_IO_ERROR, G_IO_ERROR_INVALID_DATA);
+}
+
 int
 main (int argc, char **argv)
 {
@@ -190,5 +255,7 @@ main (int argc, char **argv)
 	g_test_add_func ("/document-buffer/reject-mutable-file", reject_mutable_file);
 	g_test_add_func ("/document-buffer/bytes-and-image-batch", bytes_and_image_batch);
 	g_test_add_func ("/document-buffer/invalid-bytes", invalid_bytes);
+	g_test_add_func ("/document-buffer/pixbuf-roundtrip", pixbuf_roundtrip);
+	g_test_add_func ("/document-buffer/invalid-pixbuf", invalid_pixbuf);
 	return g_test_run ();
 }

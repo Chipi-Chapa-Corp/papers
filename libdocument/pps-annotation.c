@@ -1417,7 +1417,10 @@ void
 pps_annotation_stamp_set_surface (PpsAnnotationStamp *stamp, cairo_surface_t *surface)
 {
 	PpsAnnotationStampPrivate *priv = GET_ANNOT_STAMP_PRIVATE (stamp);
+	cairo_surface_t *previous = priv->surface;
 	priv->surface = cairo_surface_reference (surface);
+	if (previous)
+		cairo_surface_destroy (previous);
 }
 
 /**

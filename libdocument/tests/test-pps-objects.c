@@ -133,6 +133,25 @@ free_text_font_property (void)
 	g_assert_cmpstr (pango_font_description_get_family (copy), ==, "Serif");
 }
 
+static void
+stamp_surface_lifetime (void)
+{
+	g_autoptr (PpsPage) page = pps_page_new (0);
+	g_autoptr (PpsAnnotation) annotation = pps_annotation_stamp_new (page);
+	cairo_surface_t *first = cairo_image_surface_create (CAIRO_FORMAT_ARGB32, 2, 2);
+	cairo_surface_t *second = cairo_image_surface_create (CAIRO_FORMAT_ARGB32, 2, 2);
+	pps_annotation_stamp_set_surface (PPS_ANNOTATION_STAMP (annotation), first);
+	pps_annotation_stamp_set_surface (PPS_ANNOTATION_STAMP (annotation), first);
+	g_assert_cmpuint (cairo_surface_get_reference_count (first), ==, 2);
+	pps_annotation_stamp_set_surface (PPS_ANNOTATION_STAMP (annotation), second);
+	g_assert_cmpuint (cairo_surface_get_reference_count (first), ==, 1);
+	g_assert_true (pps_annotation_stamp_get_surface (PPS_ANNOTATION_STAMP (annotation)) == second);
+	g_clear_object (&annotation);
+	g_assert_cmpuint (cairo_surface_get_reference_count (second), ==, 1);
+	cairo_surface_destroy (first);
+	cairo_surface_destroy (second);
+}
+
 int
 main (int argc, char **argv)
 {
@@ -143,5 +162,6 @@ main (int argc, char **argv)
 	g_test_add_func ("/document-objects/layer-title-lifetime", layer_title_lifetime);
 	g_test_add_func ("/document-objects/bound-wrapper-lifetime", bound_wrapper_lifetime);
 	g_test_add_func ("/document-objects/free-text-font-property", free_text_font_property);
+	g_test_add_func ("/document-objects/stamp-surface-lifetime", stamp_surface_lifetime);
 	return g_test_run ();
 }

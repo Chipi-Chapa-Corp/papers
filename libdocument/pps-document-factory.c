@@ -18,6 +18,7 @@
 #include "pps-backend-info.h"
 #include "pps-document-factory-private.h"
 #include "pps-document-factory.h"
+#include "pps-document-proxy-private.h"
 #include "pps-file-helpers.h"
 
 /* Backends manager */
@@ -56,6 +57,16 @@ get_backend_info_for_document (PpsDocument *document)
 
 	g_warn_if_fail (info != NULL);
 	return info;
+}
+
+static PpsDocument *
+create_proxy_document (const char *mime_type, GError **error)
+{
+	PpsDocument *document = _pps_document_proxy_new (mime_type, NULL, error);
+	if (document)
+		g_object_set_data (G_OBJECT (document), BACKEND_DATA_KEY,
+		                   get_backend_info_for_mime_type (mime_type));
+	return document;
 }
 
 PpsDocument *
@@ -193,7 +204,7 @@ new_document_for_uri (const char *uri,
 	if (mime_type == NULL)
 		return NULL;
 
-	document = _pps_document_factory_create_document (mime_type, error);
+	document = create_proxy_document (mime_type, error);
 	if (document == NULL)
 		return NULL;
 
@@ -346,7 +357,7 @@ pps_document_factory_get_document_for_fd (int fd,
 		return NULL;
 	}
 
-	return _pps_document_factory_create_document (mime_type, error);
+	return create_proxy_document (mime_type, error);
 }
 
 static void

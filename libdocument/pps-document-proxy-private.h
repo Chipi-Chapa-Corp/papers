@@ -29,7 +29,7 @@ struct _PpsDocumentProxyClass {
 	PpsDocumentClass parent_class;
 };
 
-/* Kept private until all backend capabilities have proxy implementations. */
+/* Backend objects are private to one document worker. */
 PPS_PRIVATE
 PpsDocument *_pps_document_proxy_new (const char *mime_type,
                                       GCancellable *cancellable,

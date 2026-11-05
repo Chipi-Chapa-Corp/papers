@@ -122,6 +122,29 @@ password_retry (void)
 }
 
 static void
+public_factory (void)
+{
+	g_autoptr (GError) error = NULL;
+	g_autoptr (PpsDocument) first = pps_document_factory_get_document (fixture_uri, &error);
+	g_assert_no_error (error);
+	g_assert_true (PPS_IS_DOCUMENT_PROXY (first));
+	load_document (first, fixture_uri);
+	int fd = open (fixture_path, O_RDONLY | O_CLOEXEC);
+	g_assert_cmpint (fd, >=, 0);
+	g_autoptr (PpsDocument) second = pps_document_factory_get_document_for_fd (fd, "application/pdf", &error);
+	g_assert_no_error (error);
+	g_assert_true (PPS_IS_DOCUMENT_PROXY (second));
+	g_assert_true (pps_document_load_fd (second, fd, &error));
+	g_assert_no_error (error);
+	pps_document_setup_cache (second);
+	g_assert_cmpstr (g_subprocess_get_identifier (_pps_document_proxy_get_session (first)->process), !=,
+	                 g_subprocess_get_identifier (_pps_document_proxy_get_session (second)->process));
+	render_page (first, 0);
+	render_page (second, 1);
+	g_assert_cmpuint (g_type_from_name ("PdfDocument"), ==, G_TYPE_INVALID);
+}
+
+static void
 fd_and_save (void)
 {
 	g_autoptr (PpsDocument) document = new_document ();
@@ -1597,6 +1620,7 @@ main (int argc, char **argv)
 	g_assert_true (pps_init ());
 	create_fixture ();
 	g_test_add_func ("/document-proxy/metadata-and-rendering", metadata_and_rendering);
+	g_test_add_func ("/document-proxy/public-factory", public_factory);
 	g_test_add_func ("/document-proxy/password-retry", password_retry);
 	g_test_add_func ("/document-proxy/fd-and-save", fd_and_save);
 	g_test_add_func ("/document-proxy/failure-and-lifetime", failure_and_lifetime);

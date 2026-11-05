@@ -19,6 +19,7 @@
  */
 
 #include "pps-job-scheduler.h"
+#include "pps-document-proxy-private.h"
 
 #ifdef G_LOG_DOMAIN
 #undef G_LOG_DOMAIN
@@ -28,7 +29,12 @@
 typedef struct _PpsSchedulerJob {
 	PpsJob *job;
 	PpsJobPriority priority;
+	GThreadPool *pool;
 } PpsSchedulerJob;
+
+static GMutex jobs_mutex;
+static GCond jobs_finished;
+static guint pending_jobs;
 
 static gpointer
 pps_jobs_hash_init (gpointer data)
@@ -59,8 +65,15 @@ pps_scheduler_job_destroy (PpsSchedulerJob *job)
 {
 	g_debug ("destroying job: %s", PPS_GET_TYPE_NAME (job->job));
 
-	g_hash_table_remove (pps_jobs_hash (), job);
+	g_mutex_lock (&jobs_mutex);
+	if (g_hash_table_lookup (pps_jobs_hash (), job->job) == job)
+		g_hash_table_remove (pps_jobs_hash (), job->job);
+	g_mutex_unlock (&jobs_mutex);
 	pps_scheduler_job_free (job);
+	g_mutex_lock (&jobs_mutex);
+	if (--pending_jobs == 0)
+		g_cond_broadcast (&jobs_finished);
+	g_mutex_unlock (&jobs_mutex);
 }
 
 static void
@@ -87,18 +100,9 @@ job_priority_compare (PpsSchedulerJob *a,
 static gpointer
 pps_job_scheduler_init (gpointer data)
 {
-	/* We limit the thread numbers to 8 since threads above 8 may result
-	 * increased latency on some machine. For example, AMD 5950x.
-	 */
 	GThreadPool *pool = g_thread_pool_new_full ((GFunc) pps_job_thread, NULL,
 	                                            (GDestroyNotify) pps_scheduler_job_destroy,
-	                                            /* MIN (8, g_get_num_processors()),
-	                                             * Temporary remove multi-threading. See
-	                                             * https://gitlab.gnome.org/GNOME/papers/-/issues/107
-	                                             * for more context
-	                                             */
-	                                            1,
-	                                            TRUE, NULL);
+	                                            1, FALSE, NULL);
 
 	g_thread_pool_set_sort_function (pool, (GCompareDataFunc) job_priority_compare, NULL);
 
@@ -114,13 +118,43 @@ pps_thread_pool (void)
 }
 
 static void
+free_pool (gpointer data)
+{
+	/* Jobs retain their owner until they leave the pool. Do not wait for the
+	 * current thread when it releases the last document reference. */
+	g_thread_pool_free (data, FALSE, FALSE);
+}
+
+/* Called with jobs_mutex held. Keep native backends serialized, while each
+ * proxy document and each independent load can wait on its own worker. */
+static GThreadPool *
+pool_for_job (PpsJob *job)
+{
+	PpsDocument *document = pps_job_get_document (job);
+	GObject *owner = PPS_IS_JOB_LOAD (job) ? G_OBJECT (job) : PPS_IS_DOCUMENT_PROXY (document) ? G_OBJECT (document)
+	                                                                                           : NULL;
+	if (!owner)
+		return pps_thread_pool ();
+	GThreadPool *pool = g_object_get_data (owner, "pps-job-pool");
+	if (!pool) {
+		pool = pps_job_scheduler_init (NULL);
+		g_object_set_data_full (owner, "pps-job-pool", pool, free_pool);
+	}
+	return pool;
+}
+
+static void
 pps_job_queue_push (PpsSchedulerJob *job)
 {
 	g_debug ("pushing job: %s, priority: %d",
 	         PPS_GET_TYPE_NAME (job->job), job->priority);
 
+	g_mutex_lock (&jobs_mutex);
+	job->pool = pool_for_job (job->job);
 	g_hash_table_insert (pps_jobs_hash (), job->job, job);
-	g_thread_pool_push (pps_thread_pool (), job, NULL);
+	pending_jobs++;
+	g_thread_pool_push (job->pool, job, NULL);
+	g_mutex_unlock (&jobs_mutex);
 }
 
 void
@@ -143,9 +177,11 @@ pps_job_scheduler_update_job (PpsJob *job,
 	g_debug ("update priority for job: %s, priority %d",
 	         PPS_GET_TYPE_NAME (job), priority);
 
-	if (priority == PPS_JOB_PRIORITY_URGENT)
-		g_thread_pool_move_to_front (pps_thread_pool (),
-		                             g_hash_table_lookup (pps_jobs_hash (), job));
+	g_mutex_lock (&jobs_mutex);
+	PpsSchedulerJob *scheduled = g_hash_table_lookup (pps_jobs_hash (), job);
+	if (scheduled && priority == PPS_JOB_PRIORITY_URGENT)
+		g_thread_pool_move_to_front (scheduled->pool, scheduled);
+	g_mutex_unlock (&jobs_mutex);
 }
 
 /**
@@ -159,8 +195,10 @@ pps_job_scheduler_wait (void)
 {
 	g_debug ("Waiting for empty job list");
 
-	while (g_thread_pool_unprocessed (pps_thread_pool ()))
-		g_usleep (100);
+	g_mutex_lock (&jobs_mutex);
+	while (pending_jobs)
+		g_cond_wait (&jobs_finished, &jobs_mutex);
+	g_mutex_unlock (&jobs_mutex);
 
 	g_debug ("Job list is empty");
 }

@@ -4,6 +4,7 @@
 #include "pps-document-objects-private.h"
 #include "pps-layer.h"
 #include "pps-link.h"
+#include "pps-transition-effect.h"
 
 static void
 identity_and_scope (void)
@@ -154,6 +155,18 @@ stamp_surface_lifetime (void)
 	cairo_surface_destroy (second);
 }
 
+static void
+transition_rectangular_property (void)
+{
+	g_autoptr (PpsTransitionEffect) effect = pps_transition_effect_new (PPS_TRANSITION_EFFECT_FLY, "rectangular", TRUE, NULL);
+	gboolean rectangular = FALSE;
+	g_object_get (effect, "rectangular", &rectangular, NULL);
+	g_assert_true (rectangular);
+	g_object_set (effect, "rectangular", FALSE, NULL);
+	g_object_get (effect, "rectangular", &rectangular, NULL);
+	g_assert_false (rectangular);
+}
+
 int
 main (int argc, char **argv)
 {
@@ -165,5 +178,6 @@ main (int argc, char **argv)
 	g_test_add_func ("/document-objects/bound-wrapper-lifetime", bound_wrapper_lifetime);
 	g_test_add_func ("/document-objects/free-text-font-property", free_text_font_property);
 	g_test_add_func ("/document-objects/stamp-surface-lifetime", stamp_surface_lifetime);
+	g_test_add_func ("/document-objects/transition-rectangular-property", transition_rectangular_property);
 	return g_test_run ();
 }

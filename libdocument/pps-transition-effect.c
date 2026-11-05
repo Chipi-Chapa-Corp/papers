@@ -114,7 +114,7 @@ pps_transition_effect_get_property (GObject *object,
 		g_value_set_double (value, priv->scale);
 		break;
 	case PROP_RECTANGULAR:
-		g_value_set_enum (value, priv->rectangular);
+		g_value_set_boolean (value, priv->rectangular);
 		break;
 	default:
 		G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);

@@ -175,6 +175,7 @@ libppsdocument = shared_library(
     'pps-document-geometry.c',
     'pps-document-objects.c',
     'pps-document-variant.c',
+    'pps-document-link-variant.c',
   ],
   include_directories: top_inc,
   dependencies: libdocument_deps,

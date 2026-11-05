@@ -26,6 +26,13 @@
     </method>
     <method name="GetInfo">
       <arg name="info" type="a{sv}" direction="out"/>
+      <arg name="pages" type="a(dds)" direction="out"/>
+      <arg name="backend_name" type="s" direction="out"/>
+      <arg name="backend_version" type="s" direction="out"/>
+      <arg name="has_security" type="b" direction="out"/>
+    </method>
+    <method name="Save">
+      <arg name="uri" type="s" direction="in"/>
     </method>
     <method name="Render">
       <annotation name="org.gtk.GDBus.C.UnixFD" value="true"/>

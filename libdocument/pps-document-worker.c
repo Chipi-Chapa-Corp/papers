@@ -174,6 +174,8 @@ get_info (PpsDBusDocument *interface,
           Worker *worker)
 {
 	g_autoptr (PpsDocumentInfo) info = NULL;
+	PpsDocumentBackendInfo backend = { 0 };
+	GVariantBuilder pages;
 
 	if (!worker->loaded) {
 		g_dbus_method_invocation_return_error_literal (
@@ -184,8 +186,45 @@ get_info (PpsDBusDocument *interface,
 	info = pps_document_get_info (worker->document);
 	if (!info)
 		info = pps_document_info_new ();
+	g_variant_builder_init (&pages, G_VARIANT_TYPE ("a(dds)"));
+	for (int i = 0; i < pps_document_get_n_pages (worker->document); i++) {
+		double width, height;
+		g_autofree char *label = pps_document_get_page_label (worker->document, i);
+		pps_document_get_page_size (worker->document, i, &width, &height);
+		g_variant_builder_add (&pages, "(dds)", width, height, label ? label : "");
+	}
+	pps_document_get_backend_info (worker->document, &backend);
 	pps_dbus_document_complete_get_info (interface, invocation,
-	                                     _pps_document_info_to_variant (info));
+	                                     _pps_document_info_to_variant (info),
+	                                     g_variant_builder_end (&pages),
+	                                     backend.name ? backend.name : "",
+	                                     backend.version ? backend.version : "",
+	                                     PPS_IS_DOCUMENT_SECURITY (worker->document) &&
+	                                         pps_document_security_has_document_security (PPS_DOCUMENT_SECURITY (worker->document)));
+	return TRUE;
+}
+
+static gboolean
+save_document (PpsDBusDocument *interface,
+               GDBusMethodInvocation *invocation,
+               const char *uri,
+               Worker *worker)
+{
+	g_autoptr (GError) error = NULL;
+
+	if (!worker->loaded) {
+		g_dbus_method_invocation_return_error_literal (
+		    invocation, G_IO_ERROR, G_IO_ERROR_NOT_INITIALIZED,
+		    "The document is not loaded");
+	} else if (!PPS_DOCUMENT_GET_CLASS (worker->document)->save) {
+		g_dbus_method_invocation_return_error_literal (
+		    invocation, G_IO_ERROR, G_IO_ERROR_NOT_SUPPORTED,
+		    "The backend cannot save documents");
+	} else if (!pps_document_save (worker->document, uri, &error)) {
+		g_dbus_method_invocation_return_gerror (invocation, error);
+	} else {
+		pps_dbus_document_complete_save (interface, invocation);
+	}
 	return TRUE;
 }
 
@@ -296,6 +335,7 @@ main (int argc, char **argv)
 	g_signal_connect (interface, "handle-load-fd", G_CALLBACK (load_document_fd), &worker);
 	g_signal_connect (interface, "handle-get-page-info", G_CALLBACK (get_page_info), &worker);
 	g_signal_connect (interface, "handle-get-info", G_CALLBACK (get_info), &worker);
+	g_signal_connect (interface, "handle-save", G_CALLBACK (save_document), &worker);
 	g_signal_connect (interface, "handle-render", G_CALLBACK (render), &worker);
 	if (!g_dbus_interface_skeleton_export (G_DBUS_INTERFACE_SKELETON (interface),
 	                                       connection, PPS_DOCUMENT_WORKER_PATH, &error)) {

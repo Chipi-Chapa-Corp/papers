@@ -59,7 +59,8 @@ page_info (PpsDocumentSession *session)
 	g_assert_cmpfloat (height, >, 0);
 	g_assert_nonnull (label);
 	g_assert_true (pps_dbus_document_call_get_info_sync (
-	    session->proxy, G_DBUS_CALL_FLAGS_NONE, 5000, &metadata, NULL, &error));
+	    session->proxy, G_DBUS_CALL_FLAGS_NONE, 5000, &metadata,
+	    NULL, NULL, NULL, NULL, NULL, &error));
 	g_assert_no_error (error);
 	info = _pps_document_info_from_variant (metadata, &error);
 	g_assert_no_error (error);

@@ -306,8 +306,7 @@ window.pps-annotation-window textview {
     font-weight: normal;
 }
 
-/* Use the raised toolbar shadow without changing the inline tab colors. */
+/* Separate the inline tabs from the document with a soft fade, without a hard edge. */
 tabbar.document-tabs-shadow {
-    box-shadow: 0 1px color-mix(in srgb, var(--headerbar-shade-color) 50%, transparent),
-                0 2px 4px color-mix(in srgb, var(--headerbar-shade-color) 50%, transparent);
+    box-shadow: 0 3px 8px -3px color-mix(in srgb, var(--headerbar-shade-color) 75%, transparent);
 }

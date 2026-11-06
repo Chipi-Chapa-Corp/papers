@@ -32,13 +32,8 @@ mod imp {
     pub struct PpsWindow {
         #[template_child]
         pub(super) tabs: TemplateChild<adw::TabView>,
-        #[template_child]
-        pub(super) tab_bar: TemplateChild<adw::TabBar>,
-        #[template_child]
-        pub(super) tab_sidebar: TemplateChild<gtk::Box>,
-        #[template_child]
-        pub(super) tab_list: TemplateChild<gtk::ListView>,
-        pub(super) narrow: Cell<bool>,
+        pub(super) tab_bar: adw::TabBar,
+        pub(super) tab_container: std::cell::OnceCell<crate::tab_container::PpsTabContainer>,
         pub(super) selected_tab: RefCell<Option<PpsDocumentTab>>,
         pub(super) menu_page: RefCell<Option<adw::TabPage>>,
         pub(super) selected_bindings: RefCell<Vec<glib::Binding>>,
@@ -79,8 +74,10 @@ mod imp {
                 .change_action_state("night-mode", &self.settings.boolean("night-mode").into());
         }
         fn dispose(&self) {
-            // Children may retain the action group after the window is gone.
-            self.obj().remove_action("vertical-tabs");
+            if let Some(container) = self.tab_container.get() {
+                container.set_host(None);
+            }
+            self.tab_bar.set_view(None);
             self.default_settings.apply();
         }
     }
@@ -246,8 +243,6 @@ mod imp {
             ];
 
             self.obj().add_action_entries(actions);
-            self.obj()
-                .add_action(&self.settings.create_action("vertical-tabs"));
         }
 
         fn setup_window_size(&self) {
@@ -386,6 +381,19 @@ mod imp {
         }
 
         fn setup_tabs(&self) {
+            self.obj().set_content(gtk::Widget::NONE);
+            let container = crate::tab_container::PpsTabContainer::new(&self.tabs, &self.tab_bar);
+            self.obj().set_content(Some(&container));
+            self.tab_container.set(container).unwrap();
+            self.tab_bar.add_css_class("inline");
+            self.tab_bar.connect_tabs_revealed_notify(|bar| {
+                if bar.is_tabs_revealed() {
+                    bar.add_css_class("document-tabs-shadow");
+                } else {
+                    bar.remove_css_class("document-tabs-shadow");
+                }
+            });
+            self.tab_bar.set_view(Some(&self.tabs.get()));
             let menu = gio::Menu::new();
             for (label, action) in [
                 (gettext("Move _Left"), "win.tab-move-backward"),
@@ -399,8 +407,6 @@ mod imp {
             self.tabs.connect_setup_menu(glib::clone!(
                 #[weak(rename_to = obj)]
                 self,
-                #[strong]
-                menu,
                 move |view, page| {
                     obj.menu_page.replace(page.cloned());
                     let Some(page) = page else {
@@ -418,33 +424,9 @@ mod imp {
                             .unwrap()
                             .set_enabled(enabled);
                     }
-                    let vertical = obj.settings.boolean("vertical-tabs") && !obj.narrow.get();
-                    menu.remove(1);
-                    menu.remove(0);
-                    menu.insert(
-                        0,
-                        Some(&if vertical {
-                            gettext("Move _Up")
-                        } else {
-                            gettext("Move _Left")
-                        }),
-                        Some("win.tab-move-backward"),
-                    );
-                    menu.insert(
-                        1,
-                        Some(&if vertical {
-                            gettext("Move _Down")
-                        } else {
-                            gettext("Move _Right")
-                        }),
-                        Some("win.tab-move-forward"),
-                    );
                 }
             ));
-            self.tab_list.set_model(Some(&self.tabs.pages()));
-            self.tab_list
-                .set_factory(Some(&crate::tab_list::factory(&self.tabs)));
-            self.update_tab_layout();
+            self.update_tab_bar();
             // These shortcuts already navigate within the document.
             self.tabs.remove_shortcuts(
                 adw::TabViewShortcuts::CONTROL_HOME
@@ -519,14 +501,13 @@ mod imp {
             } else {
                 self.obj().set_title(Some(&gettext("Document Viewer")));
             }
-            self.update_tab_layout();
+            self.update_tab_bar();
         }
 
-        fn update_tab_layout(&self) {
-            let presenting = self.current_tab().is_some_and(|tab| tab.presenting());
-            let vertical = self.settings.boolean("vertical-tabs") && !self.narrow.get();
-            self.tab_sidebar.set_visible(vertical && !presenting);
-            self.tab_bar.set_visible(!vertical && !presenting);
+        fn update_tab_bar(&self) {
+            let host = self.current_tab().and_then(|tab| tab.tab_bar_host());
+            self.tab_bar.set_visible(host.is_some());
+            self.tab_container.get().unwrap().set_host(host);
         }
 
         fn append_tab(&self, tab: &PpsDocumentTab) -> adw::TabPage {
@@ -550,7 +531,7 @@ mod imp {
             );
             tab.connect_presenting_notify(|tab| {
                 if let Some(window) = tab.root().and_downcast::<super::PpsWindow>() {
-                    window.imp().update_tab_layout();
+                    window.imp().update_tab_bar();
                 }
             });
             let page = self.tabs.append(tab);
@@ -645,23 +626,6 @@ mod imp {
 
     #[gtk::template_callbacks]
     impl PpsWindow {
-        #[template_callback]
-        fn vertical_tabs_changed(&self) {
-            self.update_tab_layout();
-        }
-
-        #[template_callback]
-        fn narrow_layout(&self) {
-            self.narrow.set(true);
-            self.update_tab_layout();
-        }
-
-        #[template_callback]
-        fn wide_layout(&self) {
-            self.narrow.set(false);
-            self.update_tab_layout();
-        }
-
         #[template_callback]
         fn window_fullscreened(&self) {
             let obj = self.obj();

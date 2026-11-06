@@ -35,6 +35,10 @@ mod imp {
     #[properties(wrapper_type = super::PpsDocumentTab)]
     #[template(resource = "/org/gnome/papers/ui/document-tab.ui")]
     pub struct PpsDocumentTab {
+        #[template_child]
+        pub(super) start_toolbar_view: TemplateChild<adw::ToolbarView>,
+        #[template_child]
+        pub(super) error_toolbar_view: TemplateChild<adw::ToolbarView>,
         // stack and views inside it
         #[template_child]
         pub(super) stack: TemplateChild<adw::ViewStack>,
@@ -1201,6 +1205,20 @@ impl PpsDocumentTab {
     pub fn request_close(&self) -> bool {
         self.imp().document_view.request_close()
     }
+    pub fn tab_bar_host(&self) -> Option<adw::ToolbarView> {
+        let imp = self.imp();
+        match imp.mode.get() {
+            WindowRunMode::StartView => Some(imp.start_toolbar_view.get()),
+            WindowRunMode::ErrorView => Some(imp.error_toolbar_view.get()),
+            WindowRunMode::LoaderView => imp.loader_view.child().and_downcast(),
+            WindowRunMode::PasswordView => imp.password_view.child().and_downcast(),
+            WindowRunMode::Normal | WindowRunMode::Fullscreen => {
+                Some(imp.document_view.tab_bar_host())
+            }
+            WindowRunMode::Presentation => None,
+        }
+    }
+
     pub fn set_fullscreen_mode(&self, fullscreened: bool) {
         self.imp().document_view.set_fullscreen_mode(fullscreened);
     }

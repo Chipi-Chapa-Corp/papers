@@ -944,6 +944,10 @@ impl PpsDocumentView {
         self.imp().model.clone()
     }
 
+    pub fn tab_bar_host(&self) -> adw::ToolbarView {
+        self.imp().document_toolbar_view.get()
+    }
+
     pub fn set_fullscreen_mode(&self, fullscreened: bool) {
         self.imp()
             .header_bar

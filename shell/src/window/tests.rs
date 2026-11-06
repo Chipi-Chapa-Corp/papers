@@ -1,6 +1,120 @@
 use super::*;
 use crate::tests::{fixture, wait_until};
 
+fn assert_tab_bar_host(window: &PpsWindow, tab: &PpsDocumentTab) {
+    let host = tab.tab_bar_host().unwrap();
+    assert!(
+        window
+            .imp()
+            .tab_container
+            .get()
+            .unwrap()
+            .slot()
+            .is_ancestor(&host)
+    );
+    assert_eq!(window.imp().tab_bar.root(), Some(window.clone().upcast()));
+    assert_eq!(
+        window.imp().tab_bar.parent(),
+        Some(window.imp().tab_container.get().unwrap().clone().upcast()),
+    );
+}
+
+#[test]
+fn tab_strip_sits_below_the_header_and_follows_the_active_view() {
+    crate::tests::run(|| {
+        let window = PpsWindow::new();
+        window
+            .imp()
+            .default_settings
+            .set_int("window-width", 1100)
+            .unwrap();
+        window.set_default_size(1100, 700);
+        let empty = window.new_tab();
+        let empty_host = empty.tab_bar_host().unwrap();
+        window.open(&fixture("utf16le-annot.pdf"), None, None);
+        // Opening reuses the empty tab; make a second page for the tab strip.
+        window.new_tab();
+        window
+            .imp()
+            .tabs
+            .set_selected_page(&window.imp().tabs.page(&empty));
+        window.present();
+        wait_until("document tab strip", || {
+            empty.document().is_some() && window.imp().tab_bar.height() > 0
+        });
+        assert_tab_bar_host(&window, &empty);
+        assert!(
+            !window
+                .imp()
+                .tab_container
+                .get()
+                .unwrap()
+                .slot()
+                .is_ancestor(&empty_host)
+        );
+        let document_host = empty.tab_bar_host().unwrap();
+        let header =
+            crate::tests::find_widget_where::<adw::HeaderBar>(&document_host, &|_| true).unwrap();
+        let header_bounds = header.compute_bounds(&window).unwrap();
+        let tabs_bounds = window.imp().tab_bar.compute_bounds(&window).unwrap();
+        assert!(tabs_bounds.y() >= header_bounds.y() + header_bounds.height());
+        assert!((tabs_bounds.x() - header_bounds.x()).abs() <= 1.0);
+
+        let split =
+            crate::tests::find_widget_where::<adw::OverlaySplitView>(&empty, &|_| true).unwrap();
+        window
+            .imp()
+            .default_settings
+            .set_int("window-width", 600)
+            .unwrap();
+        window.set_default_size(600, 700);
+        wait_until("collapsed sidebar", || split.is_collapsed());
+        split.set_show_sidebar(true);
+        wait_until("sidebar covers tab strip", || {
+            !window.imp().tab_bar.is_sensitive()
+        });
+        split.set_show_sidebar(false);
+        wait_until("uncovered tab strip", || {
+            window.imp().tab_bar.is_sensitive()
+        });
+
+        let blank = window.imp().tabs.nth_page(1);
+        let blank_tab = blank.child().downcast::<PpsDocumentTab>().unwrap();
+        window.imp().tabs.set_selected_page(&blank);
+        assert_tab_bar_host(&window, &blank_tab);
+        assert!(
+            !window
+                .imp()
+                .tab_container
+                .get()
+                .unwrap()
+                .slot()
+                .is_ancestor(&document_host)
+        );
+
+        let (invalid, stream) = gio::File::new_tmp(Some("papers-tab-layout-XXXXXX.pdf")).unwrap();
+        stream.close(gio::Cancellable::NONE).unwrap();
+        std::fs::write(invalid.path().unwrap(), b"invalid document").unwrap();
+        blank_tab.open(&invalid, None, None);
+        wait_until("error tab strip", || {
+            crate::tests::find_widget_where::<adw::StatusPage>(&blank_tab, &|page| {
+                page.title() == "Unable to Open Document" && page.is_mapped()
+            })
+            .is_some()
+        });
+        assert_tab_bar_host(&window, &blank_tab);
+
+        blank_tab.open(&fixture("PasswordEncrypted.pdf"), None, None);
+        wait_until("password tab strip", || window.visible_dialog().is_some());
+        assert_tab_bar_host(&window, &blank_tab);
+        window.visible_dialog().unwrap().force_close();
+        wait_until("password cancellation", || !blank_tab.loading());
+        assert_tab_bar_host(&window, &blank_tab);
+        window.close();
+        invalid.delete(gio::Cancellable::NONE).unwrap();
+    });
+}
+
 #[test]
 fn document_menu_moves_and_detaches_its_target_page() {
     crate::tests::run(|| {
@@ -47,6 +161,8 @@ fn document_menu_moves_and_detaches_its_target_page() {
         assert!(!model.is_continuous());
         assert_eq!(view.n_pages(), 1);
         assert_eq!(destination.imp().tabs.n_pages(), 1);
+        assert_tab_bar_host(&destination, &first);
+        assert_tab_bar_host(&window, &window.imp().current_tab().unwrap());
         window.close();
         destination.close();
         file.delete(gio::Cancellable::NONE).unwrap();
@@ -64,8 +180,10 @@ fn window_actions_follow_the_document_lifecycle() {
 
         WidgetExt::activate_action(&window, "win.presentation", None).unwrap();
         assert!(window.imp().current_tab().unwrap().is_presenting());
+        assert!(!window.imp().tab_bar.is_visible());
         WidgetExt::activate_action(&window, "win.escape", None).unwrap();
         assert!(!window.imp().current_tab().unwrap().is_presenting());
+        assert!(window.imp().tab_bar.is_visible());
         assert!(window.lookup_action("fullscreen").unwrap().is_enabled());
 
         window.close();
@@ -155,76 +273,20 @@ fn file_drops_and_tab_actions_use_the_same_document_pages() {
 }
 
 #[test]
-fn vertical_tabs_share_selection_and_adapt_to_the_window_width() {
+fn closed_windows_release_with_a_surviving_tab_bar() {
     crate::tests::run(|| {
-        let window = PpsWindow::new();
-        window
-            .imp()
-            .default_settings
-            .set_int("window-width", 1100)
-            .unwrap();
-        window.set_default_size(1100, 700);
-        window.open(&fixture("utf16le-annot.pdf"), None, None);
-        window.open(&fixture("ink_annotations.pdf"), None, None);
-        window.present();
-        WidgetExt::activate_action(&window, "win.vertical-tabs", None).unwrap();
-        wait_until("vertical tabs", || window.imp().tab_sidebar.is_visible());
-        assert!(!window.imp().tab_bar.is_visible());
-        let pages = window.imp().tab_list.model().unwrap();
-        assert_eq!(pages, window.imp().tabs.pages());
-        pages.select_item(0, true);
-        let first = window.imp().current_tab().unwrap();
-        wait_until("selected vertical document", || first.document().is_some());
-        assert_eq!(window.title().as_deref(), Some("utf16le-annot.pdf"));
-
-        window.set_default_size(600, 700);
-        wait_until("narrow tab layout", || {
-            !window.imp().tab_sidebar.is_visible() && window.imp().tab_bar.is_visible()
-        });
-        assert!(window.imp().settings.boolean("vertical-tabs"));
-        assert_eq!(window.imp().current_tab(), Some(first));
-        window.set_default_size(1100, 700);
-        wait_until("restored vertical tabs", || {
-            window.imp().tab_sidebar.is_visible()
-        });
-
-        let close = crate::tests::find_widget_where::<gtk::Button>(
-            &window.imp().tab_list.get(),
-            &|button| button.icon_name().as_deref() == Some("window-close-symbolic"),
-        )
-        .unwrap();
-        close.emit_clicked();
-        assert_eq!(window.imp().tabs.n_pages(), 1);
-        window
-            .imp()
-            .settings
-            .set_boolean("vertical-tabs", false)
-            .unwrap();
-        window.close();
-        wait_until("window close", || !window.is_visible());
-    });
-}
-
-#[test]
-fn layout_changes_do_not_notify_closed_windows() {
-    crate::tests::run(|| {
-        let settings = gio::Settings::new("org.gnome.Papers");
         for _ in 0..3 {
             let window = PpsWindow::new();
             window.new_tab();
             window.present();
             // A surviving child may still observe the window's action group.
-            let tab_bar = window.imp().tab_bar.get();
+            let tab_bar = window.imp().tab_bar.clone();
             let weak = window.downgrade();
             window.close();
             drop(window);
             wait_until("closed window release", || weak.upgrade().is_none());
-            settings
-                .set_boolean("vertical-tabs", !settings.boolean("vertical-tabs"))
-                .unwrap();
             drop(tab_bar);
         }
-        settings.set_boolean("vertical-tabs", false).unwrap();
     });
 }
 

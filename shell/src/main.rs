@@ -39,7 +39,7 @@ mod signature_drawing_widget;
 mod signature_image_processing;
 mod signature_manager;
 mod simple_color_swatch;
-mod tab_list;
+mod tab_container;
 #[cfg(test)]
 mod tests;
 mod thumbnail_item;

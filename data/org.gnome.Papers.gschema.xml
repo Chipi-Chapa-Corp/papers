@@ -34,10 +34,6 @@
     <key name="night-mode" type="b">
       <default>false</default>
     </key>
-    <key name="vertical-tabs" type="b">
-      <default>false</default>
-      <summary>Show document tabs in a sidebar when the window is wide enough</summary>
-    </key>
     <child name="default" schema="org.gnome.Papers.Default"/>
     <child name="previewer" schema="org.gnome.Papers.Previewer"/>
   </schema>

@@ -20,7 +20,7 @@ template $PpsDocumentTab: Adw.Bin {
       Adw.ViewStackPage {
         name: "start";
 
-        child: Adw.ToolbarView {
+        child: Adw.ToolbarView start_toolbar_view {
           [top]
           Adw.HeaderBar {
             [end]
@@ -56,7 +56,7 @@ template $PpsDocumentTab: Adw.Bin {
       Adw.ViewStackPage {
         name: "error";
 
-        child: Adw.ToolbarView {
+        child: Adw.ToolbarView error_toolbar_view {
           [top]
           Adw.HeaderBar {}
 
@@ -131,13 +131,6 @@ Adw.AlertDialog error_alert {
 }
 
 menu app_menu {
-  section {
-    item {
-      label: _("_Vertical Tabs");
-      action: "win.vertical-tabs";
-    }
-  }
-
   section {
     item {
       label: _("New _Tab");

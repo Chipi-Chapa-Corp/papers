@@ -305,3 +305,9 @@ window.pps-annotation-window textview {
 .nobold-label {
     font-weight: normal;
 }
+
+/* Use the raised toolbar shadow without changing the inline tab colors. */
+tabbar.document-tabs-shadow {
+    box-shadow: 0 1px color-mix(in srgb, var(--headerbar-shade-color) 50%, transparent),
+                0 2px 4px color-mix(in srgb, var(--headerbar-shade-color) 50%, transparent);
+}

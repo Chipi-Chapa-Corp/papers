@@ -5,7 +5,6 @@ using Gio 2.0;
 Gio.Settings settings {
   schema-id: "org.gnome.Papers";
   changed::night-mode => $night_mode_changed() swapped;
-  changed::vertical-tabs => $vertical_tabs_changed() swapped;
 }
 
 Gio.Settings default_settings {
@@ -19,63 +18,7 @@ template $PpsWindow: Adw.ApplicationWindow {
   height-request: 360;
   notify::fullscreened => $window_fullscreened() swapped;
 
-  Adw.Breakpoint {
-    condition ("max-width: 720sp")
-    apply => $narrow_layout() swapped;
-    unapply => $wide_layout() swapped;
-  }
-
-  content: Box {
-    Box tab_sidebar {
-      orientation: vertical;
-      width-request: 220;
-      visible: false;
-
-      Adw.HeaderBar {
-        show-end-title-buttons: false;
-
-        title-widget: Adw.WindowTitle {
-          title: _("Documents");
-        };
-
-        [end]
-        Button {
-          icon-name: "tab-new-symbolic";
-          action-name: "win.new-tab";
-          tooltip-text: _("New Tab");
-        }
-      }
-
-      ScrolledWindow {
-        vexpand: true;
-        hscrollbar-policy: never;
-
-        child: ListView tab_list {
-          styles [
-            "navigation-sidebar",
-          ]
-        };
-      }
-    }
-
-    Adw.ToolbarView {
-      hexpand: true;
-      vexpand: true;
-
-      [top]
-      Adw.TabBar tab_bar {
-        view: tabs;
-
-        start-action-widget: Button {
-          icon-name: "tab-new-symbolic";
-          action-name: "win.new-tab";
-          tooltip-text: _("New Tab");
-        };
-      }
-
-      content: Adw.TabView tabs {};
-    }
-  };
+  content: Adw.TabView tabs {};
 
   DropTarget {
     formats: "GdkFileList";

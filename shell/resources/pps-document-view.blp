@@ -1,6 +1,7 @@
 using Gtk 4.0;
 using Adw 1;
 using Gio 2.0;
+using Gdk 4.0;
 
 $PpsDocumentModel model {
   page-changed => $page_changed() swapped;
@@ -45,6 +46,8 @@ template $PpsDocumentView: Adw.BreakpointBin {
 
     setters {
       split_view.collapsed: true;
+      split_view.max-sidebar-width: 300;
+      sidebar_resize_handle.visible: false;
     }
   }
 
@@ -53,6 +56,8 @@ template $PpsDocumentView: Adw.BreakpointBin {
 
     setters {
       split_view.collapsed: true;
+      split_view.max-sidebar-width: 300;
+      sidebar_resize_handle.visible: false;
       page_selector.visible: "False";
     }
   }
@@ -62,128 +67,139 @@ template $PpsDocumentView: Adw.BreakpointBin {
 
   child: Adw.OverlaySplitView split_view {
     min-sidebar-width: 210;
-    max-sidebar-width: 300;
+    max-sidebar-width: 600;
     pin-sidebar: true;
     notify::show-sidebar => $sidebar_visibility_changed() swapped;
     notify::collapsed => $sidebar_collapsed_changed() swapped;
 
-    sidebar: Adw.ToolbarView sidebar_toolbar_view {
-      [top]
-      Adw.HeaderBar {
-        [start]
-        Revealer {
-          child: ToggleButton find_button {
-            icon-name: "edit-find-symbolic";
-
-            /* Translators: Translators: This is an action (a verb in English) that opens the sidebar to start a search */
-            tooltip-text: _("Search");
-            action-name: "doc.toggle-find";
-          };
-
-          reveal-child: bind find_button.sensitive;
-        }
-
-        [title]
-        Adw.WindowTitle {
-          title: _("Document Viewer");
-        }
-
-        [end]
-        MenuButton action_menu_button {
-          icon-name: "open-menu-symbolic";
-          tooltip-text: _("Main Menu");
-          menu-model: sidebar_menu;
-          primary: true;
-        }
+    sidebar: Overlay {
+      [overlay]
+      Box sidebar_resize_handle {
+        halign: end;
+        width-request: 6;
+        cursor: Gdk.Cursor {
+          name: "col-resize";
+        };
       }
 
-      content: Stack sidebar_stack {
-        transition-type: crossfade;
+      child: Adw.ToolbarView sidebar_toolbar_view {
+        [top]
+        Adw.HeaderBar {
+          [start]
+          Revealer {
+            child: ToggleButton find_button {
+              icon-name: "edit-find-symbolic";
 
-        $PpsSidebar sidebar {
-          document-model: "model";
-          navigated-to-view => $sidebar_navigate_to_view() swapped;
+              /* Translators: Translators: This is an action (a verb in English) that opens the sidebar to start a search */
+              tooltip-text: _("Search");
+              action-name: "doc.toggle-find";
+            };
 
-          [internal-child stack]
-          Adw.ViewStack {
-            enable-transitions: true;
+            reveal-child: bind find_button.sensitive;
+          }
 
-            Adw.ViewStackPage {
-              name: "thumbnails";
-              title: _("Thumbnails");
-              icon-name: "grid-large-symbolic";
+          [title]
+          Adw.WindowTitle {
+            title: _("Document Viewer");
+          }
 
-              child: $PpsSidebarThumbnails sidebar_thumbs {
-                document-model: "model";
-                sidebar: "sidebar";
-              };
-            }
-
-            Adw.ViewStackPage {
-              name: "links";
-              title: _("Outline");
-              icon-name: "outline-symbolic";
-
-              child: $PpsSidebarLinks sidebar_links {
-                document-model: "model";
-                sidebar: "sidebar";
-                link-activated => $link_activated() swapped;
-              };
-            }
-
-            Adw.ViewStackPage {
-              name: "annotations";
-              title: _("Annotations");
-              icon-name: "chat-bubble-text-symbolic";
-
-              child: $PpsSidebarAnnotations sidebar_annots {
-                document-model: "model";
-
-                annotations-context: $PpsAnnotationsContext annots_context {
-                  document-model: "model";
-                  undo-context: "undo_context";
-                };
-
-                sidebar: "sidebar";
-                annot-activated => $sidebar_annots_annot_activated() swapped;
-              };
-            }
-
-            Adw.ViewStackPage {
-              name: "attachments";
-              title: _("Attachments");
-              icon-name: "mail-attachment-symbolic";
-
-              child: $PpsSidebarAttachments sidebar_attachments {
-                document-model: "model";
-
-                attachment-context: $PpsAttachmentContext attachment_context {
-                  document-model: "model";
-                };
-
-                sidebar: "sidebar";
-              };
-            }
-
-            Adw.ViewStackPage {
-              name: "layers";
-              title: _("Layers");
-              icon-name: "view-paged-symbolic";
-
-              child: $PpsSidebarLayers sidebar_layers {
-                document-model: "model";
-                sidebar: "sidebar";
-                visibility-changed => $sidebar_layers_visibility_changed() swapped;
-              };
-            }
-
-            visible-child-name: "links";
+          [end]
+          MenuButton action_menu_button {
+            icon-name: "open-menu-symbolic";
+            tooltip-text: _("Main Menu");
+            menu-model: sidebar_menu;
+            primary: true;
           }
         }
 
-        $PpsFindSidebar find_sidebar {
-          document-model: "model";
-        }
+        content: Stack sidebar_stack {
+          transition-type: crossfade;
+
+          $PpsSidebar sidebar {
+            document-model: "model";
+            navigated-to-view => $sidebar_navigate_to_view() swapped;
+
+            [internal-child stack]
+            Adw.ViewStack {
+              enable-transitions: true;
+
+              Adw.ViewStackPage {
+                name: "thumbnails";
+                title: _("Thumbnails");
+                icon-name: "grid-large-symbolic";
+
+                child: $PpsSidebarThumbnails sidebar_thumbs {
+                  document-model: "model";
+                  sidebar: "sidebar";
+                };
+              }
+
+              Adw.ViewStackPage {
+                name: "links";
+                title: _("Outline");
+                icon-name: "outline-symbolic";
+
+                child: $PpsSidebarLinks sidebar_links {
+                  document-model: "model";
+                  sidebar: "sidebar";
+                  link-activated => $link_activated() swapped;
+                };
+              }
+
+              Adw.ViewStackPage {
+                name: "annotations";
+                title: _("Annotations");
+                icon-name: "chat-bubble-text-symbolic";
+
+                child: $PpsSidebarAnnotations sidebar_annots {
+                  document-model: "model";
+
+                  annotations-context: $PpsAnnotationsContext annots_context {
+                    document-model: "model";
+                    undo-context: "undo_context";
+                  };
+
+                  sidebar: "sidebar";
+                  annot-activated => $sidebar_annots_annot_activated() swapped;
+                };
+              }
+
+              Adw.ViewStackPage {
+                name: "attachments";
+                title: _("Attachments");
+                icon-name: "mail-attachment-symbolic";
+
+                child: $PpsSidebarAttachments sidebar_attachments {
+                  document-model: "model";
+
+                  attachment-context: $PpsAttachmentContext attachment_context {
+                    document-model: "model";
+                  };
+
+                  sidebar: "sidebar";
+                };
+              }
+
+              Adw.ViewStackPage {
+                name: "layers";
+                title: _("Layers");
+                icon-name: "view-paged-symbolic";
+
+                child: $PpsSidebarLayers sidebar_layers {
+                  document-model: "model";
+                  sidebar: "sidebar";
+                  visibility-changed => $sidebar_layers_visibility_changed() swapped;
+                };
+              }
+
+              visible-child-name: "links";
+            }
+          }
+
+          $PpsFindSidebar find_sidebar {
+            document-model: "model";
+          }
+        };
       };
     };
 
@@ -546,6 +562,13 @@ template $PpsDocumentView: Adw.BreakpointBin {
         }
       };
     };
+
+    /* Keep drag coordinates stable while the sidebar edge moves. */
+    GestureDrag {
+      propagation-phase: capture;
+      drag-begin => $sidebar_resize_begin() swapped;
+      drag-update => $sidebar_resize_update() swapped;
+    }
 
     GestureClick {
       button: 0;

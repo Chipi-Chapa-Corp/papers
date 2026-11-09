@@ -100,6 +100,8 @@ mod imp {
 
         // sidebar
         #[template_child]
+        pub(super) sidebar_resize_handle: TemplateChild<gtk::Box>,
+        #[template_child]
         pub(super) sidebar: TemplateChild<PpsSidebar>,
         #[template_child]
         pub(super) sidebar_stack: TemplateChild<gtk::Stack>,
@@ -167,6 +169,7 @@ mod imp {
         pub(super) attachment: RefCell<Option<papers_document::Attachment>>,
 
         // Misc Runtime State
+        pub(super) sidebar_resize_start_width: Cell<f64>,
         pub(super) sidebar_was_open_before_find: Cell<bool>,
         pub(super) sidebar_was_open_before_collapsed: Cell<bool>,
         pub(super) close_after_save: Cell<bool>,

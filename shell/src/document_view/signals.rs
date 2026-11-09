@@ -159,6 +159,49 @@ impl imp::PpsDocumentView {
 
     // sidebar
     #[template_callback]
+    fn sidebar_resize_begin(&self, x: f64, y: f64, gesture: &gtk::GestureDrag) {
+        if self.split_view.is_collapsed()
+            || self.split_view.pick(x, y, gtk::PickFlags::DEFAULT).as_ref()
+                != Some(self.sidebar_resize_handle.upcast_ref())
+        {
+            gesture.set_state(gtk::EventSequenceState::Denied);
+            return;
+        }
+
+        self.sidebar_resize_start_width
+            .set(self.split_view.sidebar().unwrap().width() as f64);
+        gesture.set_state(gtk::EventSequenceState::Claimed);
+    }
+
+    #[template_callback]
+    fn sidebar_resize_update(&self, offset_x: f64, _offset_y: f64) {
+        if self.split_view.is_collapsed() {
+            return;
+        }
+
+        let offset = if self.split_view.direction() == TextDirection::Rtl {
+            -offset_x
+        } else {
+            offset_x
+        };
+        let settings = self.split_view.settings();
+        let unit = self.split_view.sidebar_width_unit();
+        let min_width = unit.to_px(self.split_view.min_sidebar_width(), Some(&settings));
+        let max_width = unit.to_px(self.split_view.max_sidebar_width(), Some(&settings));
+        let available_width = self.split_view.width() as f64;
+        let content_width = adw::LengthUnit::Sp.to_px(360.0, Some(&settings));
+        let width = (self.sidebar_resize_start_width.get() + offset).clamp(
+            min_width,
+            max_width
+                .min(available_width - content_width)
+                .max(min_width),
+        );
+
+        self.split_view
+            .set_sidebar_width_fraction(width / available_width);
+    }
+
+    #[template_callback]
     pub(crate) fn sidebar_navigate_to_view(&self) {
         if self.split_view.is_collapsed() {
             self.split_view.set_show_sidebar(false);

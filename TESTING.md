@@ -28,7 +28,7 @@ and the Rust and Meson toolchains.
 Then build from the repository root:
 
 ```sh
-git submodule update --init --recursive
+git submodule update --init --checkout --recursive
 meson setup _build -Dprofile=devel -Ddocumentation=false -Duser_doc=false -Dnautilus=false
 meson compile -C _build
 meson devenv -C _build dokument

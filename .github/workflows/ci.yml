@@ -57,8 +57,8 @@ jobs:
           libtiff-devel poppler-glib-devel zlib-devel sane-backends-devel sane-backends-drivers-scanners
           xorg-x11-server-Xvfb xorg-x11-xauth dbus-daemon
       - uses: actions/checkout@v4
-        with:
-          submodules: recursive
+      - name: Check out pinned dependencies
+        run: git submodule update --init --checkout --recursive
       - name: Configure
         run: >-
           meson setup _build --buildtype=${{ matrix.buildtype }}

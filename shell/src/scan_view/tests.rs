@@ -94,7 +94,12 @@ fn scanning_uses_the_pdf_view_and_preserves_annotations_and_page_scope() {
                 .unwrap()
                 .is_enabled()
         );
-        crate::tests::wait_until("page-only toolbar", || view.ui().footer.width() > 0);
+        crate::tests::wait_until("page-only toolbar beside sidebar", || {
+            view.ui()
+                .footer
+                .compute_bounds(&view)
+                .is_some_and(|bounds| bounds.width() > 0.0 && bounds.x() > 100.0)
+        });
         assert_eq!(view.ui().footer.observe_children().n_items(), 2);
         let footer = view.ui().footer.compute_bounds(&view).unwrap();
         let page_host = view.viewer().tab_bar_host().compute_bounds(&view).unwrap();

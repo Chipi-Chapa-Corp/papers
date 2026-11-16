@@ -32,7 +32,7 @@ yet. Once the first GitHub release is public:
 1. Generate the catalog package from its published archive:
 
    ```sh
-   python3 .github/scripts/flatpark-submission.py --tag v51.0 \
+   python3 .github/scripts/flatpark-submission.py --tag v0.1.0 \
      --output _build/flatpark-submission/com.chipichapa.Dokument
    ```
 

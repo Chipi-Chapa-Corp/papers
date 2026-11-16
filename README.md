@@ -35,11 +35,11 @@ from Flathub if it is not already available.
 
 Set the version in `meson.build`, add its release notes to
 `data/org.gnome.Papers.metainfo.xml.in.in`, commit the changes, and push a matching
-version tag, for example `v51.0` for version `51.0`:
+version tag, for example `v0.1.0` for version `0.1.0`:
 
 ```sh
-git tag v51.0
-git push origin v51.0
+git tag v0.1.0
+git push origin v0.1.0
 ```
 
 The **Linux release** workflow validates the tag, runs CI, builds the stable

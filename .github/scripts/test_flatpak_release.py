@@ -1,9 +1,9 @@
-import configparser
 import hashlib
 import importlib.util
 import json
 import subprocess
 import tempfile
+import tarfile
 import unittest
 from pathlib import Path
 
@@ -50,52 +50,60 @@ class FlatpakReleaseTests(unittest.TestCase):
             for source in module["sources"]:
                 self.assertTrue(source.get("sha256") or source.get("tag") or source.get("commit"), name)
 
-    def test_packaging_preserves_update_origin_and_checksums(self):
+    def payload(self, directory):
+        root = Path(directory)
+        repository = root / "repo"
+        repository.mkdir()
+        (repository / "summary").touch()
+        build = root / "build"
+        for name in ["bin/dokument", "libexec/dokument-scan-worker", "lib/debug/unneeded.debug"]:
+            file = build / "files" / name
+            file.parent.mkdir(parents=True, exist_ok=True)
+            file.write_bytes(name.encode())
+            file.chmod(0o755)
+        return repository, build, root / "assets"
+
+    def test_packaging_produces_flatpark_payload_and_checksums(self):
         with tempfile.TemporaryDirectory() as directory:
-            pages = Path(directory) / "pages"
-            repository = pages / "flatpak"
-            repository.mkdir(parents=True)
-            (repository / "summary").touch()
-            assets = Path(directory) / "assets"
+            repository, build, assets = self.payload(directory)
             calls = []
 
             def run(args, check):
                 self.assertTrue(check)
                 calls.append(args)
-                if args[1] == "build-bundle":
+                if args[0] == "tar":
+                    subprocess.run(args, check=True)
+                else:
                     Path(args[-3]).write_bytes(b"flatpak test bundle")
 
-            release.package(repository, pages, assets, run=run)
-            self.assertIn(f"--repo-url={release.REPO_URL}", calls[-1])
+            release.package(repository, build, assets, run=run)
+            self.assertFalse(any(arg.startswith("--repo-url=") for arg in calls[-1]))
             self.assertIn(f"--runtime-repo={release.RUNTIME_REPO}", calls[-1])
             self.assertEqual(calls[-1][-2:], [release.APP_ID, release.BRANCH])
-            self.assertTrue((pages / ".nojekyll").is_file())
-            for name, section in [("dokument.flatpakref", "Flatpak Ref"), ("dokument.flatpakrepo", "Flatpak Repo")]:
-                descriptor = configparser.ConfigParser()
-                descriptor.read(repository / name)
-                self.assertEqual(descriptor[section]["Url"], release.REPO_URL)
-                self.assertEqual((assets / name).read_bytes(), (repository / name).read_bytes())
+            with tarfile.open(assets / "dokument-linux-x86_64.tar.gz") as archive:
+                for name in ["bin/dokument", "libexec/dokument-scan-worker"]:
+                    self.assertEqual(archive.extractfile(f"./{name}").read(), name.encode())
+                    self.assertTrue(archive.getmember(f"./{name}").mode & 0o111)
+                self.assertNotIn("./lib/debug/unneeded.debug", archive.getnames())
             for line in (assets / "SHA256SUMS").read_text().splitlines():
                 checksum, name = line.split("  ")
                 self.assertEqual(checksum, hashlib.sha256((assets / name).read_bytes()).hexdigest())
-            metadata = json.loads((repository / "dokument-build.json").read_text())
+            metadata = json.loads((assets / "dokument-build.json").read_text())
             self.assertEqual(metadata["version"], release.version())
             self.assertEqual(metadata["branch"], release.BRANCH)
 
     def test_failed_bundle_is_not_published_as_a_complete_download(self):
         with tempfile.TemporaryDirectory() as directory:
-            pages = Path(directory) / "pages"
-            repository = pages / "flatpak"
-            repository.mkdir(parents=True)
-            (repository / "summary").touch()
-            assets = Path(directory) / "assets"
+            repository, build, assets = self.payload(directory)
 
             def run(args, check):
-                if args[1] == "build-bundle":
+                if args[0] == "tar":
+                    subprocess.run(args, check=True)
+                else:
                     raise subprocess.CalledProcessError(1, args)
 
             with self.assertRaises(subprocess.CalledProcessError):
-                release.package(repository, pages, assets, run=run)
+                release.package(repository, build, assets, run=run)
             self.assertFalse((assets / "SHA256SUMS").exists())
 
 

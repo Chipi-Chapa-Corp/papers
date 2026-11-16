@@ -8,16 +8,13 @@ DjVu, TIFF, and comic book archives.
 
 Dokument is licensed under the [GPLv2 or later](COPYING).
 
-Stable releases are published to [GitHub Releases](https://github.com/Chipi-Chapa-Corp/papers/releases)
-and Dokument's Flatpak update repository:
+Download the Linux `.flatpak` installer from
+[GitHub Releases](https://github.com/Chipi-Chapa-Corp/papers/releases).
+Releases also include the prebuilt Linux archive used for FlatPark packaging.
 
-```sh
-flatpak install --user https://chipi-chapa-corp.github.io/papers/flatpak/dokument.flatpakref
-```
-
-The repository is created by the first version-tag release. The
-`.flatpakref` installs Dokument and configures updates; `.flatpakrepo` and
-standalone `.flatpak` installers are also attached to each release.
+[FlatPark](https://flatpark.org/) is the intended catalog and update channel.
+The initial listing needs a public release and catalog review; it is not available
+there yet. See [FlatPark publication](build-aux/flatpark/README.md).
 
 ### Development builds
 
@@ -45,11 +42,13 @@ git tag v51.0
 git push origin v51.0
 ```
 
-The **Flatpak release** workflow validates the tag, runs CI, builds the stable
-`com.chipichapa.Dokument` package for x86_64, deploys its update repository to
-GitHub Pages, and publishes a GitHub release with installers and SHA-256 checksums.
+The **Linux release** workflow validates the tag, runs CI, builds the stable
+`com.chipichapa.Dokument` package for x86_64, and publishes the Linux archive,
+standalone Flatpak installer, build metadata, and SHA-256 checksums on GitHub.
+After publishing, `flatpark/publish-action` notifies FlatPark to pick up the new
+archive. This requires the initial catalog listing to have been accepted.
 Release builds use GNOME 51 and the default profile, with no striped development
-header. The repository's GitHub Pages source must be set to **GitHub Actions**.
+header.
 Version tags use `vX.Y` or `vX.Y.Z`. A manual workflow run builds and tests the
 package and uploads artifacts without publishing a release.
 

@@ -1,4 +1,4 @@
-name: Flatpak release
+name: Linux release
 
 on:
   push:
@@ -8,7 +8,6 @@ on:
 permissions:
   contents: read
 
-# Serialise deployments to the shared stable update repository.
 concurrency:
   group: flatpak-release
   cancel-in-progress: false
@@ -61,17 +60,16 @@ jobs:
       - name: Prepare the checked-out release
         run: |
           python3 .github/scripts/flatpak-release.py prepare dist/flatpak-release.json
-          mkdir -p dist/flatpak-pages
       - name: Build stable Flatpak
         run: >-
           flatpak-builder --user --force-clean --disable-rofiles-fuse --jobs=4
-          --repo=dist/flatpak-pages/flatpak --install-deps-from=flathub
+          --repo=dist/flatpak-repo --install-deps-from=flathub
           dist/flatpak-build dist/flatpak-release.json
-      - name: Package update repository and standalone installer
+      - name: Package Linux archive for FlatPark and standalone installer
         run: python3 .github/scripts/flatpak-release.py package
       - name: Verify installable application
         run: |
-          flatpak remote-add --user --no-gpg-verify dokument-build "file://$GITHUB_WORKSPACE/dist/flatpak-pages/flatpak"
+          flatpak remote-add --user --no-gpg-verify dokument-build "file://$GITHUB_WORKSPACE/dist/flatpak-repo"
           flatpak remote-info --user dokument-build com.chipichapa.Dokument//stable
           flatpak install --user --assumeyes --noninteractive --no-deps dokument-build com.chipichapa.Dokument//stable
           (cd dist/release && sha256sum --check SHA256SUMS)
@@ -81,32 +79,11 @@ jobs:
           path: dist/release/
           if-no-files-found: error
           compression-level: 0
-      - uses: actions/upload-pages-artifact@v4
-        with:
-          path: dist/flatpak-pages
-
-  flatpak-pages:
-    name: Publish Flatpak update repository
-    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
-    needs: [validate, build]
-    runs-on: ubuntu-24.04
-    permissions:
-      contents: read
-      pages: write
-      id-token: write
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    steps:
-      - uses: actions/configure-pages@v5
-      - name: Deploy Flatpak repository
-        id: deployment
-        uses: actions/deploy-pages@v4
 
   release:
     name: Publish GitHub release
     if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
-    needs: [metadata, validate, build, flatpak-pages]
+    needs: [metadata, validate, build]
     runs-on: ubuntu-24.04
     permissions:
       contents: write
@@ -132,3 +109,17 @@ jobs:
           fi
           gh release upload "$RELEASE_TAG" release-artifacts/* --clobber
           gh release edit "$RELEASE_TAG" --draft=false
+
+  flatpark:
+    name: Notify FlatPark
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    needs: release
+    runs-on: ubuntu-24.04
+    # The first catalog listing needs FlatPark review; notification failures
+    # must not invalidate an otherwise successful upstream release.
+    continue-on-error: true
+    steps:
+      - uses: flatpark/publish-action@v1
+        with:
+          app-id: com.chipichapa.Dokument
+          tag: ${{ github.ref_name }}

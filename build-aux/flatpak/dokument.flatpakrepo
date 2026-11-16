@@ -1,9 +1,0 @@
-[Flatpak Repo]
-Title=Dokument
-Url=https://chipi-chapa-corp.github.io/papers/flatpak
-Homepage=https://github.com/Chipi-Chapa-Corp/papers
-Comment=Stable releases of Dokument
-Description=Read, annotate, and scan documents with Dokument
-Icon=https://chipi-chapa-corp.github.io/papers/flatpak/dokument.svg
-DefaultBranch=stable
-GPGVerify=false

@@ -3,19 +3,15 @@
 
 import argparse
 import hashlib
-import html
 import json
 import re
-import shutil
 import subprocess
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-PACKAGING = ROOT / "build-aux/flatpak"
 APP_ID = "com.chipichapa.Dokument"
 BRANCH = "stable"
 ARCH = "x86_64"
-REPO_URL = "https://chipi-chapa-corp.github.io/papers/flatpak"
 RUNTIME_REPO = "https://dl.flathub.org/repo/flathub.flatpakrepo"
 
 
@@ -41,51 +37,37 @@ def prepare(output, root=ROOT):
     output.write_text(json.dumps(manifest, indent=4) + "\n")
 
 
-def package(repository, pages, assets, run=subprocess.run):
+def package(repository, build, assets, run=subprocess.run):
     value = version()
     repository = repository.resolve()
-    pages = pages.resolve()
+    build = build.resolve()
     assets = assets.resolve()
-    if repository != pages / "flatpak":
-        raise ValueError("The exported repository must be the Pages directory's flatpak child")
     if not (repository / "summary").is_file():
         raise ValueError("Build and export the Flatpak repository before packaging it")
+    for name in ["bin/dokument", "libexec/dokument-scan-worker"]:
+        if not (build / "files" / name).is_file():
+            raise ValueError(f"Missing release payload: {name}")
     assets.mkdir(parents=True, exist_ok=True)
-    run([
-        "flatpak", "build-update-repo", "--title=Dokument",
-        "--comment=Stable releases of Dokument",
-        "--description=Read, annotate, and scan documents with Dokument",
-        "--homepage=https://github.com/Chipi-Chapa-Corp/papers",
-        f"--icon={REPO_URL}/dokument.svg", f"--default-branch={BRANCH}",
-        "--generate-static-deltas", str(repository),
-    ], check=True)
-    for name in ["dokument.flatpakref", "dokument.flatpakrepo"]:
-        shutil.copyfile(PACKAGING / name, repository / name)
-        shutil.copyfile(PACKAGING / name, assets / name)
-    shutil.copyfile(ROOT / "data/icons/scalable/apps/com.chipichapa.Dokument.svg", repository / "dokument.svg")
     commit = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip()
-    (repository / "dokument-build.json").write_text(json.dumps({
+    (assets / "dokument-build.json").write_text(json.dumps({
         "version": value, "commit": commit, "appId": APP_ID,
-        "arch": ARCH, "branch": BRANCH, "repoUrl": REPO_URL,
+        "arch": ARCH, "branch": BRANCH, "runtime": "org.gnome.Platform/51",
+        "prefix": "/app",
     }, indent=2) + "\n")
-    (pages / ".nojekyll").touch()
-    (pages / "index.html").write_text(
-        '<!doctype html><html lang="en"><meta charset="utf-8">'
-        '<meta name="viewport" content="width=device-width, initial-scale=1">'
-        f'<title>Dokument {html.escape(value)}</title><h1>Dokument {html.escape(value)}</h1>'
-        '<p>Read, annotate, and scan documents.</p>'
-        '<p><a href="flatpak/dokument.flatpakref">Install Dokument</a> · '
-        '<a href="flatpak/dokument.flatpakrepo">Add the update repository</a> · '
-        '<a href="https://github.com/Chipi-Chapa-Corp/papers/releases">Downloads</a></p>'
-        f'<pre>flatpak install --user {REPO_URL}/dokument.flatpakref</pre>'
-        '<p>Installed copies receive new releases through Flatpak updates.</p></html>\n'
-    )
+    # FlatPark consumes official prebuilt Linux archives as extra-data. Preserve
+    # the /app tree, including scanner drivers and schemas; omit split debuginfo.
+    epoch = subprocess.check_output(["git", "show", "-s", "--format=%ct", "HEAD"], cwd=ROOT, text=True).strip()
+    archive = assets / "dokument-linux-x86_64.tar.gz"
+    run([
+        "tar", "--sort=name", f"--mtime=@{epoch}", "--numeric-owner", "--owner=0", "--group=0",
+        "--exclude=./lib/debug", "-czf", str(archive), "-C", str(build / "files"), ".",
+    ], check=True)
     bundle = assets / "dokument-linux-x86_64.flatpak"
     run([
-        "flatpak", "build-bundle", f"--arch={ARCH}", f"--repo-url={REPO_URL}",
+        "flatpak", "build-bundle", f"--arch={ARCH}",
         f"--runtime-repo={RUNTIME_REPO}", str(repository), str(bundle), APP_ID, BRANCH,
     ], check=True)
-    filenames = [bundle.name, "dokument.flatpakref", "dokument.flatpakrepo"]
+    filenames = [archive.name, bundle.name, "dokument-build.json"]
     checksums = []
     for name in filenames:
         with (assets / name).open("rb") as file:
@@ -102,8 +84,8 @@ def main():
     manifest = commands.add_parser("prepare")
     manifest.add_argument("output", type=Path)
     pack = commands.add_parser("package")
-    pack.add_argument("--repository", type=Path, default=Path("dist/flatpak-pages/flatpak"))
-    pack.add_argument("--pages", type=Path, default=Path("dist/flatpak-pages"))
+    pack.add_argument("--repository", type=Path, default=Path("dist/flatpak-repo"))
+    pack.add_argument("--build", type=Path, default=Path("dist/flatpak-build"))
     pack.add_argument("--assets", type=Path, default=Path("dist/release"))
     args = parser.parse_args()
     try:
@@ -112,7 +94,7 @@ def main():
         elif args.command == "prepare":
             prepare(args.output)
         else:
-            package(args.repository, args.pages, args.assets)
+            package(args.repository, args.build, args.assets)
     except (ValueError, OSError, subprocess.CalledProcessError) as error:
         parser.exit(1, f"{error}\n")
 

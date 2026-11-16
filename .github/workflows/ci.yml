@@ -65,7 +65,8 @@ jobs:
         run: >-
           meson setup _build --buildtype=${{ matrix.buildtype }}
           -Dprofile=devel -Dscanning=enabled -Ddocumentation=false -Duser_doc=false -Dnautilus=false
-      - uses: actions/cache@v4
+      - uses: actions/cache/restore@v4
+        id: cargo-cache
         with:
           path: |
             _build/cargo-home
@@ -73,6 +74,14 @@ jobs:
           key: fedora-${{ matrix.buildtype }}-${{ hashFiles('Cargo.lock') }}
       - name: Build
         run: meson compile -C _build
+      - name: Cache compiled dependencies
+        if: steps.cargo-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            _build/cargo-home
+            _build/cargo-target
+          key: fedora-${{ matrix.buildtype }}-${{ hashFiles('Cargo.lock') }}
       - name: Check Rust warnings
         if: matrix.buildtype == 'debug'
         run: meson compile -C _build cargo-clippy

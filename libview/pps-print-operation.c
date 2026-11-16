@@ -1675,10 +1675,13 @@ pps_print_operation_print_begin_print (PpsPrintOperationPrint *print,
 	PpsPrintOperation *op = PPS_PRINT_OPERATION (print);
 	gint n_pages;
 
-	/* GTK 4.22.4 releases the preview surface both in launch_preview and
-	 * preview_print_idle_done. Supply the second reference it consumes. */
+	/* GTK 4.22.4 through 4.25.0 release the preview surface both in
+	 * launch_preview and preview_print_idle_done. Supply the second
+	 * reference they consume; keep this bounded to affected releases. */
 	if (op->print_preview && gtk_get_major_version () == 4 &&
-	    gtk_get_minor_version () == 22 && gtk_get_micro_version () == 4)
+	    gtk_check_version (4, 22, 4) == NULL &&
+	    (gtk_get_minor_version () < 25 ||
+	     (gtk_get_minor_version () == 25 && gtk_get_micro_version () == 0)))
 		cairo_surface_reference (cairo_get_target (gtk_print_context_get_cairo_context (context)));
 
 	n_pages = pps_document_get_n_pages (op->document);
@@ -2004,7 +2007,7 @@ pps_print_operation_print_create_custom_widget (PpsPrintOperationPrint *print,
 	gtk_grid_attach (GTK_GRID (grid), label, 0, 0, 1, 1);
 
 	/* translators: Value for 'Page Scaling:' to not scale the document pages on printing */
-	print->scale_dropdown = gtk_drop_down_new_from_strings ((const char *[]) {
+	print->scale_dropdown = gtk_drop_down_new_from_strings ((const char *[]){
 	    _ ("None"),
 	    _ ("Shrink to Printable Area"),
 	    _ ("Fit to Printable Area"),

@@ -211,7 +211,7 @@ impl imp::PpsDocumentView {
     }
 
     fn print_settings_filename(&self, create: bool) -> PathBuf {
-        let dot_dir = glib::user_config_dir().join("papers");
+        let dot_dir = glib::user_config_dir().join("dokument");
 
         if create {
             glib::mkdir_with_parents(&dot_dir, 0o700);

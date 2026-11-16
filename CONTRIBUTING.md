@@ -14,7 +14,7 @@ keep your authorship on any of those changes.
 
 ## Code Style
 
-Papers uses code formatters to increase consistency and simplify development.
+Dokument uses code formatters to increase consistency and simplify development.
 Please fix CI code formatting issues, and configure your development environment
 to use clang-format for C code, and rustfmt for Rust code.
 
@@ -37,7 +37,7 @@ Closes #1234
  second newline, but that is not nice for the interfaces).
 
  - Whenever possible, the first line should include the subsystem of
-   the papers the commit belongs: `shell`, `libdocument`, `libview`,
+   the project the commit belongs: `shell`, `libdocument`, `libview`,
    `libmisc`, `backends`, `build`, `doc`, `flatpak`.
    e.g. “flatpak: bump version of poppler”
 
@@ -54,27 +54,20 @@ Closes #1234
 
  - While adding the main description please make sure that individual lines
 within the body are no longer than 80 columns, ideally a bit less. This makes
-it easier to read without scrolling (both in GitLab as well as a terminal with
+it easier to read without scrolling (both on GitHub as well as a terminal with
 the default terminal size).
 
  - When committing code on behalf of others use the `--author` option, e.g.
  `git commit -a --author "Joe Coder <joe@coder.org>"` and `--signoff`.
 
- - If your commit is addressing an issue, use the
- [GitLab syntax](https://docs.gitlab.com/ce/user/project/issues/automatic_issue_closing.html)
- to automatically close the issue when merging the commit with the upstream
- repository:
+ - Reference issues using `Fixes #1234` or `Closes #1234` so GitHub can close
+   them when the pull request is merged into the default branch.
 
-```plain
-Closes #1234
-Fixes #1234
-Closes: https://gitlab.gnome.org/GNOME/gtk/issues/1234
-```
+## GUI tests
 
- - If you have a merge request with multiple commits and none of them
- completely fixes an issue, you should add a reference to the issue in
- the commit message, e.g. `Bug: #1234`, and use the automatic issue
- closing syntax in the description of the merge request.
+Run GUI tests in a private display and D-Bus session, using fixtures and separate
+application data. Agent-owned tests must use the local `isolated-gui` skill and
+its helper; never launch them on the user's desktop or inherited session bus.
 
 ## Troubleshooting
 
@@ -90,20 +83,17 @@ PPS_DEBUG_SHOW_BORDERS
 
 #### Example
 ```c
-PPS_DEBUG_JOBS=1 papers document.pdf
+PPS_DEBUG_JOBS=1 dokument document.pdf
 ```
 
 ### Asking Development-related questions
 
-If you are working or want to work on Papers, but you bump into
-development-related questions, the Papers developers and community are reachable
-in the public [Matrix room](https://matrix.to/#/#papers:gnome.org). Do not
-hesitate to join and ask questions if you still have any after reading this
-document!
+Ask development questions and submit pull requests in
+[Dokument's repository](https://github.com/Chipi-Chapa-Corp/papers).
 
 ### ‘Show borders’ debugging hint
 
-Papers can show a border around the following graphical elements:
+Dokument can show a border around the following graphical elements:
 
  * text characters
  * links
@@ -115,10 +105,10 @@ Papers can show a border around the following graphical elements:
 
 this can be very helpful when debugging display issues related to those
 elements, to activate it you just need to set two env vars when calling
-Papers from a terminal, e.g. to show annotation borders:
+Dokument from a terminal, e.g. to show annotation borders:
 
 ```sh
-PPS_DEBUG=borders PPS_DEBUG_SHOW_BORDERS=annots papers
+PPS_DEBUG=borders PPS_DEBUG_SHOW_BORDERS=annots dokument
 ```
 
 where `PPS_DEBUG_SHOW_BORDERS` can be set to any of the following values:
@@ -130,25 +120,25 @@ else will need to debug stuff in the future.
 
 ### Debug Poppler messages
 
-Poppler is the library used by Papers to render PDF documents. When a document
+Poppler is the library used by Dokument to render PDF documents. When a document
 presents error, or there are issues in Poppler to handle it, the output can be
 seen by setting `G_MESSAGES_DEBUG` to enable debug messages for Poppler.
 
 #### Example
 
 ```
-G_MESSAGES_DEBUG=Poppler papers document.pdf
+G_MESSAGES_DEBUG=Poppler dokument document.pdf
 ```
 
 or
 
 ```
-G_MESSAGES_DEBUG=all papers document.pdf
+G_MESSAGES_DEBUG=all dokument document.pdf
 ```
 
-### Builder Cannot Run Papers
+### Builder Cannot Run Dokument
 
-One of the possible problems that can be encountered when running Papers in
+One of the possible problems that can be encountered when running Dokument in
 GNOME Builder is missing SDKs or runtimes that were not installed for some reason.
 If you encountered similar problem, such as missing `org.gnome.Sdk` or alike:
 
@@ -157,7 +147,7 @@ If you encountered similar problem, such as missing `org.gnome.Sdk` or alike:
 GNOME SDK can be installed from the GNOME Nightly repository, which can be installed with:
 
 ```bash
-# Papers is built against the current unstable version of GNOME's platform and SDK which is available from its own gnome-nightly repo
+# Dokument is built against the current unstable version of GNOME's platform and SDK which is available from its own gnome-nightly repo
 flatpak remote-add --user --if-not-exists flathub-beta https://flathub.org/beta-repo/flathub-beta.flatpakrepo
 flatpak remote-add --user --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
 flatpak remote-add --user --if-not-exists gnome-nightly https://nightly.gnome.org/gnome-nightly.flatpakrepo

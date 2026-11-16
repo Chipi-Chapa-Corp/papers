@@ -1,0 +1,45 @@
+name: Flatpak
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - name: Install Flatpak tools
+        run: sudo apt-get update && sudo apt-get install -y flatpak flatpak-builder
+      - name: Add runtime repositories
+        run: |
+          flatpak remote-add --user --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
+          flatpak remote-add --user --if-not-exists gnome-nightly https://nightly.gnome.org/gnome-nightly.flatpakrepo
+      - name: Use the checked-out revision
+        run: |
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          manifest = Path('build-aux/flatpak/com.chipichapa.Dokument.Devel.json')
+          data = json.loads(manifest.read_text())
+          data['modules'][-1]['sources'] = [{
+              'type': 'dir', 'path': str(Path.cwd()),
+              'skip': ['.git', '_build', '.flatpak-builder', 'repo'],
+          }]
+          manifest.write_text(json.dumps(data, indent=4) + '\n')
+          PY
+      - name: Build Flatpak
+        run: >-
+          flatpak-builder --user --force-clean --repo=repo
+          --install-deps-from=flathub --install-deps-from=gnome-nightly
+          _build/flatpak build-aux/flatpak/com.chipichapa.Dokument.Devel.json
+      - name: Bundle Flatpak
+        run: flatpak build-bundle repo Dokument.Devel.flatpak com.chipichapa.Dokument.Devel
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Dokument-Devel-x86_64
+          path: Dokument.Devel.flatpak

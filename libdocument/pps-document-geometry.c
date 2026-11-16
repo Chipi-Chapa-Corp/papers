@@ -20,7 +20,7 @@ _pps_rgba_from_variant (GVariant *value, GdkRGBA *color)
 	if (!isfinite (r) || !isfinite (g) || !isfinite (b) || !isfinite (a) ||
 	    fabs (r) > G_MAXFLOAT || fabs (g) > G_MAXFLOAT || fabs (b) > G_MAXFLOAT || fabs (a) > G_MAXFLOAT)
 		return FALSE;
-	*color = (GdkRGBA){ r, g, b, a };
+	*color = (GdkRGBA) { r, g, b, a };
 	return TRUE;
 }
 

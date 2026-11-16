@@ -2,7 +2,7 @@ use crate::deps::*;
 use oo7::{Keyring, Secret};
 use std::collections::HashMap;
 
-const DOC_LABEL: &str = "org.gnome.Papers.Document";
+const DOC_LABEL: &str = "com.chipichapa.Dokument.Document";
 
 fn attributes_for_uri(uri: &str) -> HashMap<&str, &str> {
     HashMap::from([("type", "document_password"), ("uri", uri)])

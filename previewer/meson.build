@@ -49,7 +49,7 @@ if enable_gtk_unix_print
 endif
 
 executable(
-  'papers-previewer',
+  'dokument-previewer',
   previewer_sources,
   include_directories: top_inc,
   dependencies: previewer_deps,

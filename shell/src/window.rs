@@ -499,7 +499,7 @@ mod imp {
                 tab.set_fullscreen_mode(self.obj().is_fullscreen());
                 tab.focus_view();
             } else {
-                self.obj().set_title(Some(&gettext("Document Viewer")));
+                self.obj().set_title(Some(&gettext("Dokument")));
             }
             self.update_tab_bar();
         }

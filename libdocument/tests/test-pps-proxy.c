@@ -489,8 +489,8 @@ forms_edit_and_save (void)
 	PpsFormField *check = find_field (mappings, "Check");
 	PpsFormField *list = find_field (mappings, "List");
 	PpsFormField *combo = find_field (mappings, "Combo");
-	PpsFormField *radio_a = pps_mapping_list_get_data (mappings, &(PpsPoint){ 20, 270 });
-	PpsFormField *radio_b = pps_mapping_list_get_data (mappings, &(PpsPoint){ 50, 270 });
+	PpsFormField *radio_a = pps_mapping_list_get_data (mappings, &(PpsPoint) { 20, 270 });
+	PpsFormField *radio_b = pps_mapping_list_get_data (mappings, &(PpsPoint) { 50, 270 });
 	PpsFormField *reset = find_field (mappings, "Reset");
 	g_assert_true (PPS_IS_FORM_FIELD_SIGNATURE (find_field (mappings, "Signature")));
 	g_assert_true (find_field (mappings, "Read only")->is_read_only);
@@ -567,7 +567,7 @@ forms_edit_and_save (void)
 	assert_form_text (PPS_DOCUMENT_FORMS (saved), find_field (saved_fields, "Combo"), "Custom β");
 	g_assert_true (pps_document_forms_form_field_button_get_state (PPS_DOCUMENT_FORMS (saved), find_field (saved_fields, "Check")));
 	g_assert_true (pps_document_forms_form_field_choice_is_item_selected (PPS_DOCUMENT_FORMS (saved), find_field (saved_fields, "List"), 1));
-	g_assert_true (pps_document_forms_form_field_button_get_state (PPS_DOCUMENT_FORMS (saved), pps_mapping_list_get_data (saved_fields, &(PpsPoint){ 50, 270 })));
+	g_assert_true (pps_document_forms_form_field_button_get_state (PPS_DOCUMENT_FORMS (saved), pps_mapping_list_get_data (saved_fields, &(PpsPoint) { 50, 270 })));
 	pps_mapping_list_unref (saved_fields);
 	/* The reset button must retain its field list across the process boundary. */
 	pps_document_forms_reset_form (forms, pps_link_get_action (reset->activation_link));
@@ -999,12 +999,12 @@ annotation_ink_stamp_and_fonts (void)
 	g_autoptr (PpsAnnotation) ink = pps_annotation_ink_new (page);
 	PpsPoint points[] = { { 20, 160 }, { 40, 180 }, { 60, 160 } };
 	PpsPath path = { points, 3 };
-	pps_annotation_ink_set_ink_list (PPS_ANNOTATION_INK (ink), pps_ink_list_new_for_array ((const PpsPath *[]){ &path }, 1));
+	pps_annotation_ink_set_ink_list (PPS_ANNOTATION_INK (ink), pps_ink_list_new_for_array ((const PpsPath *[]) { &path }, 1));
 	pps_annotation_set_border_width (ink, 2);
 	pps_annotation_set_rgba (ink, &color);
 	pps_document_annotations_add_annotation (annotations, ink);
 	points[1].y = 190;
-	pps_annotation_ink_set_ink_list (PPS_ANNOTATION_INK (ink), pps_ink_list_new_for_array ((const PpsPath *[]){ &path }, 1));
+	pps_annotation_ink_set_ink_list (PPS_ANNOTATION_INK (ink), pps_ink_list_new_for_array ((const PpsPath *[]) { &path }, 1));
 	g_autoptr (PpsAnnotation) stamp = pps_annotation_stamp_new (page);
 	cairo_surface_t *surface = cairo_image_surface_create (CAIRO_FORMAT_ARGB32, 8, 8);
 	cairo_t *cr = cairo_create (surface);
@@ -1013,7 +1013,7 @@ annotation_ink_stamp_and_fonts (void)
 	cairo_destroy (cr);
 	pps_annotation_stamp_set_surface (PPS_ANNOTATION_STAMP (stamp), surface);
 	cairo_surface_destroy (surface);
-	area = (PpsRectangle){ 80, 160, 120, 200 };
+	area = (PpsRectangle) { 80, 160, 120, 200 };
 	pps_annotation_set_area (stamp, &area);
 	pps_document_annotations_add_annotation (annotations, stamp);
 	g_assert_cmphex (pixel_color (document, 100, 180), ==, 0xff0000);
@@ -1069,7 +1069,7 @@ annotation_scope_and_errors (void)
 	load_document (second, fixture_uri);
 	g_autoptr (PpsPage) page = pps_document_get_page (first, 0);
 	g_autoptr (PpsAnnotation) note = pps_annotation_text_new (page);
-	pps_annotation_set_area (note, &(PpsRectangle){ 10, 10, 34, 34 });
+	pps_annotation_set_area (note, &(PpsRectangle) { 10, 10, 34, 34 });
 	pps_document_annotations_add_annotation (PPS_DOCUMENT_ANNOTATIONS (first), note);
 	pps_annotation_set_contents (note, "First document");
 	pps_document_annotations_add_annotation (PPS_DOCUMENT_ANNOTATIONS (second), note);
@@ -1162,7 +1162,7 @@ annotation_attachment_batches (void)
 		if (offset == PPS_DOCUMENT_BUFFER_BATCH_SIZE) {
 			pps_document_annotations_remove_annotation (PPS_DOCUMENT_ANNOTATIONS (document), g_list_nth_data (annotations, offset));
 			g_autoptr (PpsAnnotation) note = pps_annotation_text_new (page);
-			pps_annotation_set_area (note, &(PpsRectangle){ 10, 10, 34, 34 });
+			pps_annotation_set_area (note, &(PpsRectangle) { 10, 10, 34, 34 });
 			pps_document_annotations_add_annotation (PPS_DOCUMENT_ANNOTATIONS (document), note);
 		}
 		guint batch_size = MIN (PPS_DOCUMENT_BUFFER_BATCH_SIZE, count - offset);

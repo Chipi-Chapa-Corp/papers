@@ -1,14 +1,14 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <schemalist>
 
-  <enum id="org.gnome.Papers.SizingMode">
+  <enum id="com.chipichapa.Dokument.SizingMode">
     <value nick="fit-page" value="0"/>
     <value nick="fit-width" value="1"/>
     <value nick="free" value="2"/>
     <value nick="automatic" value="3"/>
   </enum>
 
-  <schema id="org.gnome.Papers" path="/org/gnome/papers/" gettext-domain="papers">
+  <schema id="com.chipichapa.Dokument" path="/com/chipichapa/Dokument/" gettext-domain="papers">
     <key name="override-restrictions" type="b">
       <default>true</default>
       <summary>Override document restrictions</summary>
@@ -34,11 +34,11 @@
     <key name="night-mode" type="b">
       <default>false</default>
     </key>
-    <child name="default" schema="org.gnome.Papers.Default"/>
-    <child name="previewer" schema="org.gnome.Papers.Previewer"/>
+    <child name="default" schema="com.chipichapa.Dokument.Default"/>
+    <child name="previewer" schema="com.chipichapa.Dokument.Previewer"/>
   </schema>
 
-  <schema id="org.gnome.Papers.Default" path="/org/gnome/papers/default/" gettext-domain="papers">
+  <schema id="com.chipichapa.Dokument.Default" path="/com/chipichapa/Dokument/default/" gettext-domain="papers">
     <key name="enable-spellchecking" type="b">
       <default>true</default>
       <summary>Check spelling when writing annotation notes or filling text forms.</summary>
@@ -53,7 +53,7 @@
     <key name="window-height" type="i">
       <default>1280</default>
     </key>
-    <key name="sizing-mode" enum="org.gnome.Papers.SizingMode">
+    <key name="sizing-mode" enum="com.chipichapa.Dokument.SizingMode">
       <default>'automatic'</default>
     </key>
     <key name="zoom" type="d">
@@ -116,7 +116,7 @@
     </key>
   </schema>
 
-  <schema id="org.gnome.Papers.Previewer" path="/org/gnome/papers/previewer/" gettext-domain="papers">
+  <schema id="com.chipichapa.Dokument.Previewer" path="/com/chipichapa/Dokument/previewer/" gettext-domain="papers">
     <key name="window-height" type="i">
       <default>1000</default>
       <summary>Previewer window height</summary>

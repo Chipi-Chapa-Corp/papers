@@ -115,7 +115,7 @@ mod imp {
         /// Get the signatures directory path
         pub(super) fn get_signatures_dir() -> PathBuf {
             let mut path = glib::user_data_dir();
-            path.push("papers");
+            path.push("dokument");
             path.push("signatures");
             path
         }

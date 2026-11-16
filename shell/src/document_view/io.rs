@@ -202,8 +202,8 @@ impl imp::PpsDocumentView {
                 display_name.clone()
             }
         } else {
-            title_widget.set_title(&gettext("Papers"));
-            gettext("Papers")
+            title_widget.set_title(&gettext("Dokument"));
+            gettext("Dokument")
         };
 
         if self.modified.get() {

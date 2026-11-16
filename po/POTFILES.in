@@ -1,15 +1,16 @@
 # List of source files containing translatable strings.
 # Please keep this file sorted alphabetically.
+
+data/org.gnome.Papers-previewer.desktop.in.in
 data/org.gnome.Papers.desktop.in.in
 data/org.gnome.Papers.gschema.xml
 data/org.gnome.Papers.metainfo.xml.in.in
-data/org.gnome.Papers-previewer.desktop.in.in
 libdocument/backend/comics/comics-document.c
-libdocument/backend/comics/org.gnome.Papers.ComicsDocument.papers-backend.desktop.in.in
 libdocument/backend/comics/org.gnome.Papers.ComicsDocument.metainfo.xml.in.in
+libdocument/backend/comics/org.gnome.Papers.ComicsDocument.papers-backend.desktop.in.in
 libdocument/backend/djvu/djvu-document.c
-libdocument/backend/djvu/org.gnome.Papers.DjvuDocument.papers-backend.desktop.in.in
 libdocument/backend/djvu/org.gnome.Papers.DjvuDocument.metainfo.xml.in.in
+libdocument/backend/djvu/org.gnome.Papers.DjvuDocument.papers-backend.desktop.in.in
 libdocument/backend/pdf/org.gnome.Papers.PdfDocument.metainfo.xml.in.in
 libdocument/backend/pdf/org.gnome.Papers.PdfDocument.papers-backend.desktop.in.in
 libdocument/backend/pdf/pps-poppler.c
@@ -27,16 +28,16 @@ libview/context/pps-history.c
 libview/pps-annotation-window.c
 libview/pps-jobs.c
 libview/pps-print-operation.c
-libview/pps-view.c
-libview/pps-view-presentation.c
 libview/pps-view-presentation.blp
-previewer/pps-page-selector.c
-previewer/pps-page-selector.blp
-previewer/pps-previewer.c
-previewer/pps-previewer-window.c
-previewer/pps-previewer-window.blp
+libview/pps-view-presentation.c
+libview/pps-view.c
 nautilus/pps-nautilus-extension.c
 nautilus/pps-nautilus-extension.h
+previewer/pps-page-selector.blp
+previewer/pps-page-selector.c
+previewer/pps-previewer-window.blp
+previewer/pps-previewer-window.c
+previewer/pps-previewer.c
 shell/resources/pps-annotation-properties-dialog.blp
 shell/resources/pps-document-tab.blp
 shell/resources/pps-document-view.blp
@@ -63,6 +64,7 @@ shell/src/document_view/actions.rs
 shell/src/document_view/io.rs
 shell/src/document_view/print.rs
 shell/src/document_view/signals.rs
+shell/src/find_sidebar.rs
 shell/src/keyring.rs
 shell/src/main.rs
 shell/src/page_selector.rs
@@ -76,7 +78,10 @@ shell/src/sidebar_annotations.rs
 shell/src/sidebar_annotations_row.rs
 shell/src/sidebar_attachments.rs
 shell/src/sidebar_layers.rs
-shell/src/sidebar_thumbnails.rs
 shell/src/sidebar_links.rs
+shell/src/sidebar_thumbnails.rs
+shell/src/sign_manually_dialog.rs
+shell/src/signature_drawing_widget.rs
 shell/src/thumbnail_item.rs
-
+shell/src/visual_signature_chooser.rs
+shell/src/window.rs

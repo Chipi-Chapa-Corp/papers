@@ -386,7 +386,7 @@ impl imp::PpsDocumentView {
             _ => {
                 glib::g_warning!(
                     "",
-                    "Unimplemented named action: {}, please post a bug report in Document Viewer Gitlab (https://gitlab.gnome.org/GNOME/papers/issues) with a testcase.",
+                    "Unimplemented named action: {}, please post a bug report in Dokument issue tracker (https://github.com/Chipi-Chapa-Corp/papers/issues) with a testcase.",
                     name
                 );
             }

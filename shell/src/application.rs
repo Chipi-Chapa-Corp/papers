@@ -43,7 +43,7 @@ mod imp {
             papers_document::init();
 
             // Manually set name and icon
-            glib::set_application_name(&gettext("Document Viewer"));
+            glib::set_application_name(&gettext("Dokument"));
             gtk::Window::set_default_icon_name(APP_ID);
 
             self.setup_actions();
@@ -66,11 +66,7 @@ mod imp {
         fn handle_local_options(&self, options: &glib::VariantDict) -> ControlFlow<glib::ExitCode> {
             // print the version in local instance rather than sending it to primary
             if options.contains("version") {
-                glib::g_print!(
-                    "{} {}\n",
-                    gettext("Papers Document Viewer"),
-                    crate::config::VERSION
-                );
+                glib::g_print!("{} {}\n", gettext("Dokument"), crate::config::VERSION);
                 return ControlFlow::Break(glib::ExitCode::SUCCESS);
             }
 
@@ -248,7 +244,7 @@ mod imp {
             }
 
             let debug_info = format!(
-                "Document Viewer ({GIT_COMMIT_ID})\n\n\
+                "Dokument ({GIT_COMMIT_ID})\n\n\
                 *Distribution: {distribution}\n\
                 *Desktop: {desktop_env}\n\
                 *Packaging: {packaging_format}\n\
@@ -293,7 +289,7 @@ mod imp {
                 .map(|w| gtk::prelude::WidgetExt::display(&w).app_launch_context());
             glib::spawn_future_local(async move {
                 if let Err(e) =
-                    gio::AppInfo::launch_default_for_uri_future("help:papers", context.as_ref())
+                    gio::AppInfo::launch_default_for_uri_future("help:dokument", context.as_ref())
                         .await
                 {
                     log::error!("Failed to launch help: {}", e.message());
@@ -367,7 +363,7 @@ mod imp {
 
             let obj = self.obj();
 
-            obj.set_option_context_parameter_string(Some(&gettext("Document Viewer")));
+            obj.set_option_context_parameter_string(Some(&gettext("Dokument")));
 
             obj.add_main_option(
                 "page-label",
@@ -401,7 +397,7 @@ mod imp {
                 b'f'.into(),
                 OptionFlags::NONE,
                 OptionArg::None,
-                &gettext("Run papers in fullscreen mode."),
+                &gettext("Run dokument in fullscreen mode."),
                 None,
             );
 
@@ -410,7 +406,7 @@ mod imp {
                 b's'.into(),
                 OptionFlags::NONE,
                 OptionArg::None,
-                &gettext("Run papers in presentation mode."),
+                &gettext("Run dokument in presentation mode."),
                 None,
             );
 

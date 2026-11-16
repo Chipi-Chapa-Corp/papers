@@ -5,7 +5,7 @@
   <info>
     <link type="guide" xref="index#advanced"/>
     <title type="sort">Command line</title>
-    <desc>The <cmd>papers</cmd> command can open any number of files, at specific pages and in various modes.</desc>
+    <desc>The <cmd>dokument</cmd> command can open any number of files, at specific pages and in various modes.</desc>
     <revision pkgversion="3.2" version="0.1" date="2011-09-05" status="final"/>
     <revision pkgversion="3.24" version="0.2" date="2017-09-17" status="final"/>
     <credit type="author">
@@ -23,17 +23,17 @@
 
 <title>The command line</title>
 <p>
-To start <app>Document Viewer</app> from the command line, type <cmd>papers</cmd>. You
-can open a specific file by typing the filename after the papers command:
+To start <app>Dokument</app> from the command line, type <cmd>dokument</cmd>. You
+can open a specific file by typing the filename after the dokument command:
 </p>
 
 <screen>papers file.pdf</screen>
 <p>
-You can open multiple files by typing the filenames after the papers command, separating the filenames by a space:
+You can open multiple files by typing the filenames after the dokument command, separating the filenames by a space:
 </p>
 <screen>papers file1.pdf file2.pdf</screen>
 <p>
-<app>Document Viewer</app> also supports the handling of files on the web.  For example, after the papers command you can give the location of a file on the web:
+<app>Dokument</app> also supports the handling of files on the web.  For example, after the dokument command you can give the location of a file on the web:
 </p>
 <screen>papers http://www.claymath.org/millennium/P_vs_NP/pvsnp.pdf</screen>
 <section id="open">
@@ -45,7 +45,7 @@ You can open multiple files by typing the filenames after the papers command, se
     <screen>papers --page-label=3 file.pdf</screen>
     <p>
     The page label should be in the same format as the page number displayed in
-    the <app>Document Viewer</app> header bar.
+    the <app>Dokument</app> header bar.
     </p>
 </section>
 <section id="fullsreen">

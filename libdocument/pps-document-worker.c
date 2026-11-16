@@ -413,7 +413,7 @@ main (int argc, char **argv)
 		monitor_fd = fcntl (PPS_DOCUMENT_WORKER_FD, F_DUPFD_CLOEXEC, 0);
 	if (monitor_fd != -1) {
 		ParentWatch *watch = g_new (ParentWatch, 1);
-		*watch = (ParentWatch){ monitor_fd, parent, process };
+		*watch = (ParentWatch) { monitor_fd, parent, process };
 		g_thread_unref (g_thread_new ("parent-watch", watch_parent, watch));
 	}
 	stream = g_socket_connection_factory_create_connection (socket);

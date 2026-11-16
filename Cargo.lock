@@ -713,6 +713,45 @@ dependencies = [
 ]
 
 [[package]]
+name = "dokument"
+version = "0.1.0"
+dependencies = [
+ "cairo-rs",
+ "chrono",
+ "detect-desktop-environment",
+ "env_logger",
+ "formatx",
+ "futures",
+ "gettext-rs",
+ "git-version",
+ "gtk4",
+ "image",
+ "imageproc",
+ "ink-stroke-modeler-rs",
+ "libadwaita",
+ "log",
+ "lru",
+ "oo7",
+ "papers-document",
+ "papers-view",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "dokument-thumbnailer"
+version = "0.1.0"
+dependencies = [
+ "env_logger",
+ "gettext-rs",
+ "gio",
+ "glib",
+ "image",
+ "log",
+ "papers-document",
+]
+
+[[package]]
 name = "either"
 version = "1.18.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2078,32 +2117,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "papers"
-version = "0.1.0"
-dependencies = [
- "cairo-rs",
- "chrono",
- "detect-desktop-environment",
- "env_logger",
- "formatx",
- "futures",
- "gettext-rs",
- "git-version",
- "gtk4",
- "image",
- "imageproc",
- "ink-stroke-modeler-rs",
- "libadwaita",
- "log",
- "lru",
- "oo7",
- "papers-document",
- "papers-view",
- "serde",
- "serde_json",
-]
-
-[[package]]
 name = "papers-document"
 version = "0.1.0"
 dependencies = [
@@ -2135,19 +2148,6 @@ dependencies = [
  "shell-words",
  "system-deps 9.0.0",
  "tempfile",
-]
-
-[[package]]
-name = "papers-thumbnailer"
-version = "0.1.0"
-dependencies = [
- "env_logger",
- "gettext-rs",
- "gio",
- "glib",
- "image",
- "log",
- "papers-document",
 ]
 
 [[package]]

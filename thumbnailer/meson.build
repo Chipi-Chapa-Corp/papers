@@ -2,7 +2,7 @@ input = 'papers.thumbnailer'
 
 configure_file(
   input: input + '.in',
-  output: input,
+  output: 'dokument.thumbnailer',
   configuration: mime_types_conf,
   install: true,
   install_dir: join_paths(pps_datadir, 'thumbnailers'),
@@ -41,11 +41,10 @@ copy = custom_target(
   build_always_stale: true,
   install: true,
   install_dir: get_option('bindir'),
-  output: meson.project_name() + '-thumbnailer',
+  output: 'dokument-thumbnailer',
   command: [
     'cp',
-    cargo_target_dir / rust_target / meson.project_name()
-    + '-thumbnailer',
+    cargo_target_dir / rust_target / 'dokument-thumbnailer',
     '@OUTPUT@',
   ],
 )
@@ -74,7 +73,8 @@ if get_option('tests')
   test(
     'thumbnailer cbz',
     files(thumbnailer_root / 'thumbnailer-test.sh'),
-    args: [source_root / 'test-data' / 'empty.cbz'],
+    # The upstream empty.cbz fixture contains a corrupt JPEG.
+    args: [thumbnailer_root / 'test-page.cbz'],
     env: test_env,
     workdir: meson.current_build_dir(),
     depends: [copy],

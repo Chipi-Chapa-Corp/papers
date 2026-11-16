@@ -1,5 +1,6 @@
 install_data(
-  join_paths('scalable', 'apps', '@0@.svg'.format(app_id)),
+  join_paths('scalable', 'apps', '@0@@1@.svg'.format(pps_namespace, profile)),
+  rename: '@0@.svg'.format(app_id),
   install_dir: join_paths(pps_datadir, 'icons', 'hicolor', 'scalable', 'apps'),
 )
 install_data(

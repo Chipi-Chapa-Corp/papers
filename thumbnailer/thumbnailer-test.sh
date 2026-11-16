@@ -1,3 +1,5 @@
 #!/bin/sh
-./papers-thumbnailer $1 thumbnail.png
-rm thumbnail.png
+set -eu
+trap 'rm -f thumbnail.png' EXIT
+./dokument-thumbnailer "$1" thumbnail.png
+test -s thumbnail.png

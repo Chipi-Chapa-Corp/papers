@@ -28,6 +28,7 @@ endforeach
 gschema_file = pps_namespace + '.gschema.xml'
 install_data(
   gschema_file,
+  rename: 'com.chipichapa.Dokument.gschema.xml',
   install_dir: join_paths(pps_datadir, 'glib-2.0', 'schemas'),
 )
 
@@ -40,6 +41,7 @@ man_pages = ['papers.1', 'papers-previewer.1', 'papers-thumbnailer.1']
 foreach man_page: man_pages
   install_data(
     man_page,
+    rename: man_page.replace('papers', 'dokument'),
     install_dir: join_paths(pps_mandir, 'man1'),
   )
 endforeach

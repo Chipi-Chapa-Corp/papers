@@ -1,14 +1,13 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <component type="addon">
-  <id>org.gnome.Papers.DjvuDocument</id>
-  <extends>org.gnome.Papers</extends>
+  <id>@APP_ID@.DjvuDocument</id>
+  <extends>@APP_ID@</extends>
   <name>DjVu Documents</name>
   <summary>Adds support for reading DjVu documents</summary>
   <provides>
     @METAINFO_DJVU_MIME_TYPES@
   </provides>
-  <url type="homepage">https://wiki.gnome.org/Apps/Papers/SupportedDocumentFormats</url>
+  <url type="homepage">https://github.com/Chipi-Chapa-Corp/papers</url>
   <metadata_license>GPL-2.0+ or GFDL-1.3-only</metadata_license>
   <project_license>GPL-2.0+</project_license>
-  <update_contact>https://discourse.gnome.org/tag/papers</update_contact>
 </component>

@@ -43,11 +43,11 @@ roundtrip (void)
 			g_autofree PpsPoint *empty_copy = pps_path_copy_array (&empty, &count);
 			g_assert_null (empty_copy);
 			g_assert_cmpuint (count, ==, 0);
-			PpsInkList *ink = pps_ink_list_new_for_array ((const PpsPath *[]){ &first, &second, &empty }, 3);
+			PpsInkList *ink = pps_ink_list_new_for_array ((const PpsPath *[]) { &first, &second, &empty }, 3);
 			pps_annotation_ink_set_ink_list (PPS_ANNOTATION_INK (original), ink);
 			GSList *times = NULL;
-			times = g_slist_append (times, pps_ink_time_copy (&(PpsInkTime){ 5, .25, .5 }));
-			times = g_slist_append (times, pps_ink_time_copy (&(PpsInkTime){ 7, 10, -20 }));
+			times = g_slist_append (times, pps_ink_time_copy (&(PpsInkTime) { 5, .25, .5 }));
+			times = g_slist_append (times, pps_ink_time_copy (&(PpsInkTime) { 7, 10, -20 }));
 			pps_annotation_ink_set_time_list (PPS_ANNOTATION_INK (original), times);
 		}
 		if (PPS_IS_ANNOTATION_STAMP (original)) {

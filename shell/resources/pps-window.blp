@@ -3,12 +3,12 @@ using Adw 1;
 using Gio 2.0;
 
 Gio.Settings settings {
-  schema-id: "org.gnome.Papers";
+  schema-id: "com.chipichapa.Dokument";
   changed::night-mode => $night_mode_changed() swapped;
 }
 
 Gio.Settings default_settings {
-  schema-id: "org.gnome.Papers.Default";
+  schema-id: "com.chipichapa.Dokument.Default";
 }
 
 template $PpsWindow: Adw.ApplicationWindow {

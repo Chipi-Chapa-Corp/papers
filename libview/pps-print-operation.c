@@ -558,7 +558,7 @@ pps_print_operation_export_run_previewer (PpsPrintOperationExport *export,
 
 		quoted_filename = g_shell_quote (export->temp_file);
 		quoted_settings_filename = g_shell_quote (print_settings_file);
-		cmd = g_strdup_printf ("papers-previewer --unlink-tempfile --print-settings %s %s",
+		cmd = g_strdup_printf ("dokument-previewer --unlink-tempfile --print-settings %s %s",
 		                       quoted_settings_filename, quoted_filename);
 
 		g_free (quoted_filename);
@@ -2004,7 +2004,7 @@ pps_print_operation_print_create_custom_widget (PpsPrintOperationPrint *print,
 	gtk_grid_attach (GTK_GRID (grid), label, 0, 0, 1, 1);
 
 	/* translators: Value for 'Page Scaling:' to not scale the document pages on printing */
-	print->scale_dropdown = gtk_drop_down_new_from_strings ((const char *[]){
+	print->scale_dropdown = gtk_drop_down_new_from_strings ((const char *[]) {
 	    _ ("None"),
 	    _ ("Shrink to Printable Area"),
 	    _ ("Fit to Printable Area"),

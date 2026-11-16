@@ -258,7 +258,7 @@ main (gint argc, gchar **argv)
 	bind_textdomain_codeset (GETTEXT_PACKAGE, "UTF-8");
 	textdomain (GETTEXT_PACKAGE);
 
-	g_set_prgname ("papers-previewer");
+	g_set_prgname ("dokument-previewer");
 
 	context = g_option_context_new (_ ("GNOME Document Previewer"));
 	g_option_context_set_translation_domain (context, GETTEXT_PACKAGE);

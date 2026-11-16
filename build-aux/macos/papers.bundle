@@ -10,7 +10,7 @@
   <launcher-script>${project}/launcher.sh</launcher-script>
 
   <!-- The executable for the application -->
-  <main-binary>${prefix}/bin/papers</main-binary>
+  <main-binary>${prefix}/bin/dokument</main-binary>
 
   <!-- Modules for GTK+ (image loaders, etc) -->
   <binary>${prefix}/lib/gtk-4.0</binary>

@@ -15,12 +15,12 @@
 
     <include href="legal-unported.xml" xmlns="http://www.w3.org/2001/XInclude"/>
 
-    <desc>Introduction to the <em>Papers Document Viewer</em>.</desc>
+    <desc>Introduction to the <em>Dokument</em>.</desc>
   </info>
 
   <title>Introduction</title>
 
-  <p><app>Papers</app> is a document viewer. See <link xref="formats"/> for a
+  <p><app>Dokument</app> is a document viewer. See <link xref="formats"/> for a
   list of file types you can view.</p>
 
 </page>

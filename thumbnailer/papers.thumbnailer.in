@@ -1,4 +1,4 @@
 [Thumbnailer Entry]
-TryExec=papers-thumbnailer
-Exec=papers-thumbnailer -s %s %u %o
+TryExec=dokument-thumbnailer
+Exec=dokument-thumbnailer -s %s %u %o
 MimeType=@PAPERS_MIME_TYPES@

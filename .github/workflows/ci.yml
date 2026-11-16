@@ -1,0 +1,92 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  c-format:
+    runs-on: ubuntu-latest
+    container: alpine:3.21
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install the project's C formatter
+        run: apk add clang19-extra-tools
+      - name: Check C formatting
+        run: .github/scripts/clang-format.sh
+
+  lint:
+    runs-on: ubuntu-latest
+    container: fedora:rawhide
+    steps:
+      - name: Install tools
+        run: dnf install -y git blueprint-compiler cargo rustfmt
+      - uses: actions/checkout@v4
+      - name: Check Blueprint formatting
+        run: .github/scripts/blueprint-compiler-format.sh
+      - name: Check translation sources
+        run: .github/scripts/check-potfiles.sh
+      - name: Check Rust formatting
+        run: cargo fmt --all --check
+
+  build:
+    runs-on: ubuntu-latest
+    container: fedora:rawhide
+    strategy:
+      fail-fast: false
+      matrix:
+        buildtype: [debug, release]
+    steps:
+      - name: Install dependencies
+        run: >-
+          dnf install -y git gcc meson ninja-build cargo rust clippy rustfmt
+          appstream desktop-file-utils blueprint-compiler gettext
+          cairo-devel dbus-devel djvulibre-devel exempi-devel
+          glib2-devel gobject-introspection-devel gsettings-desktop-schemas-devel
+          gtk4-devel libadwaita-devel libarchive-devel libsecret-devel
+          libtiff-devel poppler-glib-devel zlib-devel
+          xorg-x11-server-Xvfb xorg-x11-xauth dbus-daemon
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - name: Configure
+        run: >-
+          meson setup _build --buildtype=${{ matrix.buildtype }}
+          -Dprofile=devel -Ddocumentation=false -Duser_doc=false -Dnautilus=false
+      - uses: actions/cache@v4
+        with:
+          path: |
+            _build/cargo-home
+            _build/cargo-target
+          key: fedora-${{ matrix.buildtype }}-${{ hashFiles('Cargo.lock') }}
+      - name: Build
+        run: meson compile -C _build
+      - name: Check Rust warnings
+        if: matrix.buildtype == 'debug'
+        run: meson compile -C _build cargo-clippy
+      - name: Test
+        env:
+          GSETTINGS_BACKEND: memory
+          GSK_RENDERER: cairo
+          LIBGL_ALWAYS_SOFTWARE: '1'
+          GTK_A11Y: none
+        run: xvfb-run -a dbus-run-session -- meson test -C _build --print-errorlogs
+      - name: Check installation
+        run: DESTDIR="$PWD/_install" meson install -C _build --no-rebuild
+      - name: Build translation template
+        if: matrix.buildtype == 'debug'
+        run: meson compile -C _build papers-pot
+      - name: Upload build and test logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: logs-${{ matrix.buildtype }}
+          path: _build/meson-logs/

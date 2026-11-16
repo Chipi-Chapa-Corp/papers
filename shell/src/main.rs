@@ -52,8 +52,8 @@ fn main() -> glib::ExitCode {
     let mut log_builder = env_logger::builder();
     log_builder.format_timestamp_millis();
 
-    if !glib::log_writer_default_would_drop(glib::LogLevel::Debug, Some("papers")) {
-        log_builder.filter_module("papers", log::LevelFilter::Debug);
+    if !glib::log_writer_default_would_drop(glib::LogLevel::Debug, Some("dokument")) {
+        log_builder.filter_module("dokument", log::LevelFilter::Debug);
     }
 
     log_builder.init();

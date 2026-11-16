@@ -1,5 +1,5 @@
 project(
-  'papers', ['c'],
+  'dokument', ['c'],
   version: '51.0',
   license: 'GPL-2.0-or-later',
   meson_version: '>= 1.8.0',
@@ -15,9 +15,10 @@ else
   profile = ''
   object_profile = ''
 endif
-app_id = 'org.gnome.Papers@0@'.format(profile)
+app_id = 'com.chipichapa.Dokument@0@'.format(profile)
 
-pps_name = meson.project_name().to_lower()
+# Preserve installed library paths and existing translation catalogs.
+pps_name = 'papers'
 
 pps_version = meson.project_version()
 version_array = pps_version.split('.')
@@ -63,6 +64,8 @@ pps_backends_binary_version = pps_document_current
 pps_backends_subdir = join_paths(pps_name, pps_backends_binary_version.to_string(), 'backends')
 pps_backendsdir = join_paths(pps_libdir, pps_backends_subdir)
 
+# Source templates and library APIs retain the upstream namespace.
+# The application ID and settings namespace belong to Dokument.
 pps_namespace = 'org.gnome.Papers'
 
 pps_code_prefix = 'Pps'

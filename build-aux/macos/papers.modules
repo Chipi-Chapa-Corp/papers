@@ -73,14 +73,14 @@
             repo="poppler" />
   </cmake>
 
-  <meson id="papers" mesonargs="-Ddocumentation=false
+  <meson id="dokument" mesonargs="-Ddocumentation=false
                                 -Dintrospection=disabled
                                 -Duser_doc=false
                                 -Dcomics=enabled
                                 -Ddjvu=enabled
                                 -Dnautilus=false">
-    <branch repo="gnome-gitlab" module="GNOME/papers.git"
-            revision="gnome-48" />
+    <branch repo="github" module="Chipi-Chapa-Corp/papers.git"
+            revision="main" />
     <dependencies>
       <dep package="poppler" />
       <dep package="gtk-4" />

@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Project xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+         xmlns:foaf="http://xmlns.com/foaf/0.1/"
+         xmlns="http://usefulinc.com/ns/doap#">
+  <name xml:lang="en">Dokument</name>
+  <shortdesc xml:lang="en">View multipage documents</shortdesc>
+  <description xml:lang="en">A fork of Papers with quality-of-life improvements, tabs, and document scanning.</description>
+  <homepage rdf:resource="https://github.com/Chipi-Chapa-Corp/papers" />
+  <download-page rdf:resource="https://github.com/Chipi-Chapa-Corp/papers/releases" />
+  <bug-database rdf:resource="https://github.com/Chipi-Chapa-Corp/papers/issues" />
+  <programming-language>C</programming-language>
+  <programming-language>Rust</programming-language>
+  <maintainer>
+    <foaf:Organization rdf:about="https://github.com/Chipi-Chapa-Corp">
+      <foaf:name>Chipi-Chapa-Corp</foaf:name>
+    </foaf:Organization>
+  </maintainer>
+</Project>

@@ -84,7 +84,7 @@ if enable_user_doc
   ]
 
   gnome.yelp(
-    pps_name,
+    'dokument',
     sources: sources,
     media: media,
     symlink_media: true,

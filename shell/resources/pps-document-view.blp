@@ -30,11 +30,11 @@ $PpsUndoContext undo_context {
 }
 
 Gio.Settings default_settings {
-  schema-id: "org.gnome.Papers.Default";
+  schema-id: "com.chipichapa.Dokument.Default";
 }
 
 Gio.Settings settings {
-  schema-id: "org.gnome.Papers";
+  schema-id: "com.chipichapa.Dokument";
   changed::override-restrictions => $doc_restrictions_changed() swapped;
   changed::page-cache-size => $page_cache_size_changed();
   changed::allow-links-change-zoom => $allow_links_change_zoom_changed();
@@ -77,6 +77,7 @@ template $PpsDocumentView: Adw.BreakpointBin {
       Box sidebar_resize_handle {
         halign: end;
         width-request: 6;
+
         cursor: Gdk.Cursor {
           name: "col-resize";
         };
@@ -99,9 +100,7 @@ template $PpsDocumentView: Adw.BreakpointBin {
           }
 
           [title]
-          Adw.WindowTitle {
-            title: _("Document Viewer");
-          }
+          Box {}
 
           [end]
           MenuButton action_menu_button {
@@ -214,6 +213,13 @@ template $PpsDocumentView: Adw.BreakpointBin {
           icon-name: "sidebar-show-symbolic";
           action-name: "doc.show-sidebar";
           tooltip-text: _("Toggle Sidebar");
+        }
+
+        [start]
+        Button {
+          icon-name: "list-add-symbolic";
+          action-name: "win.new-tab";
+          tooltip-text: _("New Tab");
         }
 
         [end]
@@ -856,7 +862,7 @@ menu sidebar_menu {
     }
 
     item {
-      label: _("_About Document Viewer");
+      label: _("_About Dokument");
       action: "app.about";
     }
   }

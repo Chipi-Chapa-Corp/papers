@@ -27,6 +27,7 @@ foreach backend, backend_mime_types: backends
   )
 
   backend_mime_types_conf = configuration_data()
+  backend_mime_types_conf.set('APP_ID', app_id)
   backend_mime_types_conf.set(backend.to_upper() + '_MIME_TYPES', ';'.join(backend_mime_types))
 
   metainfo_mime_types = ''
@@ -61,7 +62,7 @@ foreach backend, backend_mime_types: backends
       output: backend_metainfo + '.in',
       configuration: backend_mime_types_conf,
     ),
-    output: backend_metainfo,
+    output: backend_metainfo.replace('org.gnome.Papers', app_id),
     po_dir: po_dir,
     install: true,
     install_dir: join_paths(pps_datadir, 'metainfo'),
@@ -71,7 +72,7 @@ foreach backend, backend_mime_types: backends
     if (appstreamcli.found())
       test('validate-@0@-metainfo'.format(backend_id),
            appstreamcli,
-           args: ['validate', '--no-net', '--explain', backend_metainfo],
+           args: ['validate', '--no-net', '--explain', backend_metainfo.replace('org.gnome.Papers', app_id)],
            workdir: meson.current_build_dir()
           )
     endif

@@ -169,7 +169,7 @@ pps_previewer_window_do_print (PpsPreviewerWindow *window)
 	gboolean rv = FALSE;
 	GError *error = NULL;
 
-	job = gtk_print_job_new (priv->print_job_title ? priv->print_job_title : (priv->source_file ? priv->source_file : _ ("Papers Document Viewer")),
+	job = gtk_print_job_new (priv->print_job_title ? priv->print_job_title : (priv->source_file ? priv->source_file : _ ("Dokument")),
 	                         priv->printer,
 	                         priv->print_settings,
 	                         priv->print_page_setup);
@@ -389,7 +389,7 @@ pps_previewer_window_constructed (GObject *object)
 	pps_document_model_set_sizing_mode (priv->model, PPS_SIZING_AUTOMATIC);
 
 	view_sizing_mode_changed (priv->model, NULL, window);
-	priv->settings = g_settings_new ("org.gnome.Papers.Previewer");
+	priv->settings = g_settings_new ("com.chipichapa.Dokument.Previewer");
 
 	g_settings_bind (priv->settings,
 	                 "window-width",
@@ -487,7 +487,7 @@ pps_previewer_window_set_print_settings_take_file (PpsPreviewerWindow *window,
 	if (!rv) {
 		priv->print_settings = gtk_print_settings_new ();
 		priv->print_page_setup = gtk_page_setup_new ();
-		priv->print_job_title = g_strdup (_ ("Papers"));
+		priv->print_job_title = g_strdup (_ ("Dokument"));
 		return FALSE;
 	}
 
@@ -509,7 +509,7 @@ pps_previewer_window_set_print_settings_take_file (PpsPreviewerWindow *window,
 		gtk_window_set_title (GTK_WINDOW (window), job_name);
 	} else {
 		g_free (job_name);
-		priv->print_job_title = g_strdup (_ ("Papers Document Viewer"));
+		priv->print_job_title = g_strdup (_ ("Dokument"));
 	}
 
 	g_key_file_free (key_file);

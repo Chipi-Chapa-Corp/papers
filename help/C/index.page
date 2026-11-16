@@ -4,9 +4,9 @@
       id="index">
 
   <info>
-    <title type='link' role="trail">Papers Document Viewer</title>
-    <title type='link'>Papers Document Viewer</title>
-    <title type='text'>Papers Document Viewer</title>
+    <title type='link' role="trail">Dokument</title>
+    <title type='link'>Dokument</title>
+    <title type='text'>Dokument</title>
     <revision pkgversion="3.2" date="2011-09-05" status="final"/>
     <revision pkgversion="3.12" date="2014-02-28" status="final"/>
 
@@ -21,15 +21,15 @@
 
     <include href="legal-unported.xml" xmlns="http://www.w3.org/2001/XInclude"/>
 
-    <desc><app>Document Viewer</app>, formally known as <app>Papers</app>, is
+    <desc><app>Dokument</app> is a fork of <app>Papers</app>
     made for viewing PDF documents. Learn how to get started with
-    <app>Papers</app> and its features.</desc>
+    <app>Dokument</app> and its features.</desc>
 
   </info>
 
   <title>
     <media type="image" its:translate="no" width="48px" height="48px" src="figures/org.gnome.Papers.svg" />
-    Document Viewer Help
+    Dokument Help
   </title>
 
 <section id="reading" style="2column">

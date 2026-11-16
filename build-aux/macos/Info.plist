@@ -5,15 +5,15 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>English</string>
 	<key>CFBundleExecutable</key>
-	<string>Papers</string>
+	<string>Dokument</string>
 	<key>CFBundleIconFile</key>
 	<string>Papers.icns</string>
 	<key>CFBundleIdentifier</key>
-	<string>org.gnome.Papers</string>
+	<string>com.chipichapa.Dokument</string>
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
 	<key>CFBundleName</key>
-	<string>papers</string>
+	<string>Dokument</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>

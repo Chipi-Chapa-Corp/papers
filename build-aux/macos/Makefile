@@ -1,15 +1,15 @@
-all: papers.dmg
+all: Dokument.dmg
 
 
-papers.dmg: papers.app
+Dokument.dmg: Dokument.app
 	sh dmg.sh
 
-papers.app: papers.bundle Info.plist Papers.icns launcher.sh
-	rm -rf papers.app
+Dokument.app: papers.bundle Info.plist Papers.icns launcher.sh
+	rm -rf Dokument.app
 	gtk-mac-bundler papers.bundle
 
 clean:
-	rm -rf papers.app papers.dmg
+	rm -rf Dokument.app Dokument.dmg
 
 
 .PHONY: all clean

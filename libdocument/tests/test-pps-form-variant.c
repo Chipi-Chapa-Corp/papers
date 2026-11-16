@@ -147,7 +147,7 @@ invalid_fields (void)
 	GVariantDict dictionary;
 	g_variant_dict_init (&dictionary, choice_value);
 	g_variant_dict_insert_value (&dictionary, "selected-items",
-	                             g_variant_new_fixed_array (G_VARIANT_TYPE_INT32, (gint32[]){ 1, -1 }, 2, sizeof (gint32)));
+	                             g_variant_new_fixed_array (G_VARIANT_TYPE_INT32, (gint32[]) { 1, -1 }, 2, sizeof (gint32)));
 	g_autoptr (GVariant) negative_item = g_variant_ref_sink (g_variant_dict_end (&dictionary));
 	g_assert_null (_pps_form_field_from_variant (negative_item, client, &error));
 	g_assert_error (error, G_IO_ERROR, G_IO_ERROR_INVALID_DATA);

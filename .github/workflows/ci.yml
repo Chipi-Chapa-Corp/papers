@@ -55,7 +55,7 @@ jobs:
           glib2-devel gobject-introspection-devel gsettings-desktop-schemas-devel
           gtk4-devel libadwaita-devel libarchive-devel libsecret-devel
           libtiff-devel poppler-glib-devel zlib-devel sane-backends-devel sane-backends-drivers-scanners
-          xorg-x11-server-Xvfb xorg-x11-xauth dbus-daemon
+          xorg-x11-server-Xvfb xorg-x11-xauth dbus-daemon openbox xprop
       - uses: actions/checkout@v4
       - name: Check out pinned dependencies
         run: |
@@ -82,7 +82,33 @@ jobs:
           GSK_RENDERER: cairo
           LIBGL_ALWAYS_SOFTWARE: '1'
           GTK_A11Y: none
-        run: xvfb-run -a dbus-run-session -- meson test -C _build --print-errorlogs
+        run: |
+          export XDG_RUNTIME_DIR="$(mktemp -d)"
+          chmod 700 "$XDG_RUNTIME_DIR"
+          trap 'rm -rf "$XDG_RUNTIME_DIR"' EXIT
+          # Keep desktop portals out of automated native print-dialog tests.
+          cat > "$XDG_RUNTIME_DIR/bus.conf" <<'EOF'
+          <busconfig>
+            <type>session</type><listen>unix:tmpdir=/tmp</listen><auth>EXTERNAL</auth>
+            <policy context="default">
+              <allow own="*"/><allow send_destination="*"/><allow receive_sender="*"/>
+            </policy>
+          </busconfig>
+          EOF
+          xvfb-run -a -s '-screen 0 1600x1500x24' \
+            dbus-run-session --config-file="$XDG_RUNTIME_DIR/bus.conf" -- sh -eu -c '
+              openbox --sm-disable > "$XDG_RUNTIME_DIR/openbox.log" 2>&1 &
+              wm=$!
+              trap "kill $wm" EXIT
+              for attempt in $(seq 1 100); do
+                if xprop -root _NET_SUPPORTING_WM_CHECK | grep -q "window id"; then
+                  exec meson test -C _build --print-errorlogs
+                fi
+                sleep 0.1
+              done
+              cat "$XDG_RUNTIME_DIR/openbox.log"
+              exit 1
+            '
       - name: Check installation
         run: DESTDIR="$PWD/_install" meson install -C _build --no-rebuild
       - name: Build translation template

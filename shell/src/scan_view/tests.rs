@@ -147,6 +147,27 @@ fn scanning_uses_the_pdf_view_and_preserves_annotations_and_page_scope() {
                 .is_enabled()
         );
         other.destroy();
+        // Cursor icons must also work in runtimes without legacy SVG pixbuf loaders.
+        view.viewer()
+            .activate_action("doc.toggle-edit-mode", None)
+            .unwrap();
+        for tool in [
+            papers_view::AnnotationTool::Pencil,
+            papers_view::AnnotationTool::Highlight,
+            papers_view::AnnotationTool::Eraser,
+        ] {
+            view.viewer()
+                .model()
+                .annotation_model()
+                .unwrap()
+                .set_tool(tool);
+            while glib::MainContext::default().pending() {
+                glib::MainContext::default().iteration(false);
+            }
+        }
+        view.viewer()
+            .activate_action("doc.toggle-edit-mode", None)
+            .unwrap();
         let doc = view.viewer().model().document().unwrap();
         let annots = doc
             .clone()

@@ -520,6 +520,24 @@ drag_begin (GtkGestureDrag *annotation_drag_gesture,
 	                       GTK_EVENT_SEQUENCE_CLAIMED);
 }
 
+static cairo_surface_t *
+cursor_icon_surface (const char *name)
+{
+	g_autofree char *uri = g_strdup_printf ("resource:///org/gnome/papers/icons/scalable/apps/%s-symbolic.svg", name);
+	g_autoptr (GFile) file = g_file_new_for_uri (uri);
+	g_autoptr (GtkIconPaintable) icon = gtk_icon_paintable_new_for_file (file, 32, 1);
+	GtkSnapshot *snapshot = gtk_snapshot_new ();
+	gdk_paintable_snapshot (GDK_PAINTABLE (icon), GDK_SNAPSHOT (snapshot), 32, 32);
+	g_autoptr (GskRenderNode) node = gtk_snapshot_free_to_node (snapshot);
+	if (!node)
+		return NULL;
+	cairo_surface_t *surface = cairo_image_surface_create (CAIRO_FORMAT_ARGB32, 32, 32);
+	cairo_t *cr = cairo_create (surface);
+	gsk_render_node_draw (node, cr);
+	cairo_destroy (cr);
+	return surface;
+}
+
 static void
 update_cursor (PpsAnnotationLayerInk *draw)
 {
@@ -537,34 +555,25 @@ update_cursor (PpsAnnotationLayerInk *draw)
 
 	switch (pps_annotation_model_get_tool (GET_ANNOT_MODEL (draw))) {
 	case TOOL_PENCIL:
-		if (!priv->pencil_pixbuf) {
-			g_autoptr (GdkPixbuf) pen_pixbuf;
-			pen_pixbuf = gdk_pixbuf_new_from_resource ("/org/gnome/papers/icons/scalable/apps/pencil-symbolic.svg", NULL);
-			priv->pencil_pixbuf = pps_document_misc_surface_from_pixbuf (pen_pixbuf);
-		}
+		if (!priv->pencil_pixbuf)
+			priv->pencil_pixbuf = cursor_icon_surface ("pencil");
 		icon_surface = priv->pencil_pixbuf;
 		break;
 	case TOOL_ERASER:
-		if (!priv->eraser_pixbuf) {
-			g_autoptr (GdkPixbuf) eraser_pixbuf;
-			eraser_pixbuf = gdk_pixbuf_new_from_resource ("/org/gnome/papers/icons/scalable/apps/eraser-symbolic.svg", NULL);
-			priv->eraser_pixbuf = pps_document_misc_surface_from_pixbuf (eraser_pixbuf);
-		}
+		if (!priv->eraser_pixbuf)
+			priv->eraser_pixbuf = cursor_icon_surface ("eraser");
 		icon_surface = priv->eraser_pixbuf;
 		color = NULL;
 		break;
 	case TOOL_HIGHLIGHT:
 	default:
-		if (!priv->highlight_pixbuf) {
-			g_autoptr (GdkPixbuf) highlight_pixbuf;
-			highlight_pixbuf = gdk_pixbuf_new_from_resource ("/org/gnome/papers/icons/scalable/apps/marker-symbolic.svg", NULL);
-			priv->highlight_pixbuf = pps_document_misc_surface_from_pixbuf (highlight_pixbuf);
-		}
+		if (!priv->highlight_pixbuf)
+			priv->highlight_pixbuf = cursor_icon_surface ("marker");
 		icon_surface = priv->highlight_pixbuf;
 		break;
 	}
-	icon_width = cairo_image_surface_get_width (icon_surface);
-	icon_height = cairo_image_surface_get_height (icon_surface);
+	icon_width = icon_surface ? cairo_image_surface_get_width (icon_surface) : 0;
+	icon_height = icon_surface ? cairo_image_surface_get_height (icon_surface) : 0;
 	surface = cairo_image_surface_create (CAIRO_FORMAT_ARGB32, 2 * circle_radius + icon_width, 2 * circle_radius + icon_height);
 
 	int hotspot_x = circle_radius;
@@ -581,8 +590,10 @@ update_cursor (PpsAnnotationLayerInk *draw)
 	cairo_fill (cr);
 
 	cairo_translate (cr, circle_radius, -circle_radius - icon_height);
-	cairo_set_source_surface (cr, icon_surface, 0, 0);
-	cairo_paint (cr);
+	if (icon_surface) {
+		cairo_set_source_surface (cr, icon_surface, 0, 0);
+		cairo_paint (cr);
+	}
 	cairo_surface_flush (surface);
 	cairo_destroy (cr);
 
@@ -593,6 +604,7 @@ update_cursor (PpsAnnotationLayerInk *draw)
 	G_GNUC_END_IGNORE_DEPRECATIONS
 	cursor = gdk_cursor_new_from_texture (texture, hotspot_x, hotspot_y, NULL);
 	gtk_widget_set_cursor (GTK_WIDGET (draw), cursor);
+	cairo_surface_destroy (surface);
 }
 
 static void

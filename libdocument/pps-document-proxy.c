@@ -8,6 +8,7 @@
 #include "pps-document-misc.h"
 #include "pps-document-proxy-private.h"
 #include "pps-document-security.h"
+#include "pps-init.h"
 
 enum {
 	PROP_0,
@@ -61,13 +62,13 @@ _pps_document_proxy_get_objects (PpsDocument *document)
 guint
 _pps_document_proxy_get_state (PpsDocument *document)
 {
-	return get_private (document)->state;
+	return g_atomic_int_get (&get_private (document)->state);
 }
 
 void
 _pps_document_proxy_set_state (PpsDocument *document, guint state)
 {
-	get_private (document)->state = state;
+	g_atomic_int_set (&get_private (document)->state, state);
 	pps_document_set_modified (document, (state & PPS_DOCUMENT_STATE_MODIFIED) != 0);
 }
 
@@ -156,6 +157,14 @@ load_fd (PpsDocument *document, int fd, GError **error)
 }
 
 static gboolean
+notify_saved_state (gpointer data)
+{
+	PpsDocument *document = PPS_DOCUMENT (data);
+	pps_document_set_modified (document, (_pps_document_proxy_get_state (document) & PPS_DOCUMENT_STATE_MODIFIED) != 0);
+	return G_SOURCE_REMOVE;
+}
+
+static gboolean
 save (PpsDocument *document, const char *uri, GError **error)
 {
 	g_autoptr (PpsDocument) hold = g_object_ref (document);
@@ -164,7 +173,14 @@ save (PpsDocument *document, const char *uri, GError **error)
 	if (!pps_dbus_document_call_save_sync (priv->session->proxy, uri,
 	                                       G_DBUS_CALL_FLAGS_NONE, -1, &state, NULL, error))
 		return FALSE;
-	_pps_document_proxy_set_state (document, state);
+	/* Save jobs run off the UI thread. Deliver property notifications on the
+	 * main context, and read the latest state if annotations changed meanwhile. */
+	if (_pps_is_main_thread ()) {
+		_pps_document_proxy_set_state (document, state);
+	} else {
+		g_atomic_int_set (&priv->state, state);
+		g_idle_add_full (G_PRIORITY_DEFAULT, notify_saved_state, g_object_ref (document), g_object_unref);
+	}
 	return TRUE;
 }
 

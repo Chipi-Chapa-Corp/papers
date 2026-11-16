@@ -7412,26 +7412,41 @@ char *
 pps_view_get_selected_text (PpsView *view)
 {
 	GString *text;
-	GList *l;
+	GList *l, *selections;
+	g_autoptr (PpsView) hold = g_object_ref (view);
 	gchar *normalized_text;
 	PpsViewPrivate *priv = GET_PRIVATE (view);
-	PpsDocument *document = pps_document_model_get_document (priv->model);
+	PpsDocument *current = pps_document_model_get_document (priv->model);
+	if (!PPS_IS_SELECTION (current))
+		return NULL;
+	g_autoptr (PpsDocument) document = g_object_ref (current);
+	/* Selection requests may dispatch callbacks which replace the live list.
+	 * Keep the document and an independent selection snapshot across RPCs. */
+	selections = g_list_copy_deep (priv->selection_info.selections,
+	                               (GCopyFunc) pps_view_selection_copy, NULL);
 
 	text = g_string_new (NULL);
 
-	for (l = priv->selection_info.selections; l != NULL; l = l->next) {
+	for (l = selections; l != NULL; l = l->next) {
 		PpsViewSelection *selection = (PpsViewSelection *) l->data;
 		PpsPage *page;
 		gchar *tmp;
 
+		if (selection->page < 0 || selection->page >= pps_document_get_n_pages (document))
+			continue;
 		page = pps_document_get_page (document, selection->page);
+		if (!page)
+			continue;
 		tmp = pps_selection_get_selected_text (PPS_SELECTION (document),
 		                                       page, selection->style,
 		                                       &(selection->rect));
 		g_object_unref (page);
-		g_string_append (text, tmp);
+		if (tmp)
+			g_string_append (text, tmp);
 		g_free (tmp);
 	}
+
+	g_list_free_full (selections, (GDestroyNotify) pps_view_selection_free);
 
 	/* For copying text from the document to the clipboard, we want a normalization
 	 * that preserves 'canonical equivalence' i.e. that text after normalization

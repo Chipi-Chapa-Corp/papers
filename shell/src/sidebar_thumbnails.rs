@@ -39,6 +39,8 @@ mod imp {
         /// model index between page index due to support of this mode.
         #[property(set, get)]
         pub(super) blank_head: Cell<bool>,
+        #[property(set, get)]
+        pub(super) reorder_enabled: Cell<bool>,
         pub(super) block_page_changed: Cell<bool>,
         pub(super) block_activate: Cell<bool>,
         pub(super) lru: RefCell<Option<LruCache<u32, PpsThumbnailItem>>>,
@@ -66,6 +68,17 @@ mod imp {
 
     #[glib::derived_properties]
     impl ObjectImpl for PpsSidebarThumbnails {
+        fn signals() -> &'static [Signal] {
+            static SIGNALS: std::sync::OnceLock<Vec<Signal>> = std::sync::OnceLock::new();
+            SIGNALS.get_or_init(|| {
+                vec![
+                    Signal::builder("page-reordered")
+                        .param_types([u32::static_type(), u32::static_type()])
+                        .build(),
+                ]
+            })
+        }
+
         fn constructed(&self) {
             self.blank_head.set(false);
             self.lru.replace(Some(LruCache::unbounded()));
@@ -194,6 +207,104 @@ mod imp {
                 .build();
             box_.prepend(&label);
             box_.prepend(&image);
+            let drag = gtk::DragSource::builder()
+                .actions(gdk::DragAction::MOVE)
+                .build();
+            drag.connect_prepare(glib::clone!(
+                #[weak(rename_to = obj)]
+                self,
+                #[weak]
+                item,
+                #[upgrade_or]
+                None,
+                move |_, _, _| {
+                    if !obj.reorder_enabled.get() {
+                        return None;
+                    }
+                    let page = obj.page_of_document(item.position() as i32);
+                    if page < 0 {
+                        return None;
+                    }
+                    let thumbnail = item.item()?.downcast::<PpsThumbnailItem>().ok()?;
+                    obj.obj().document_model()?.set_page(page);
+                    Some(gdk::ContentProvider::for_value(&thumbnail.to_value()))
+                }
+            ));
+            drag.connect_drag_begin(glib::clone!(
+                #[weak]
+                image,
+                move |source, _| source.set_icon(image.paintable().as_ref(), 0, 0)
+            ));
+            box_.add_controller(drag);
+            let target =
+                gtk::DropTarget::new(PpsThumbnailItem::static_type(), gdk::DragAction::MOVE);
+            target.connect_motion(glib::clone!(
+                #[weak(rename_to = obj)]
+                self,
+                #[weak]
+                box_,
+                #[weak]
+                item,
+                #[upgrade_or]
+                gdk::DragAction::empty(),
+                move |_, _, y| {
+                    if !obj.reorder_enabled.get()
+                        || obj.page_of_document(item.position() as i32) < 0
+                    {
+                        return gdk::DragAction::empty();
+                    }
+                    box_.remove_css_class("scan-drop-before");
+                    box_.remove_css_class("scan-drop-after");
+                    box_.add_css_class(if y < f64::from(box_.height()) / 2.0 {
+                        "scan-drop-before"
+                    } else {
+                        "scan-drop-after"
+                    });
+                    gdk::DragAction::MOVE
+                }
+            ));
+            target.connect_leave(glib::clone!(
+                #[weak]
+                box_,
+                move |_| {
+                    box_.remove_css_class("scan-drop-before");
+                    box_.remove_css_class("scan-drop-after");
+                }
+            ));
+            target.connect_drop(glib::clone!(
+                #[weak(rename_to = obj)]
+                self,
+                #[weak]
+                box_,
+                #[weak]
+                item,
+                #[upgrade_or]
+                false,
+                move |_, value, _, y| {
+                    box_.remove_css_class("scan-drop-before");
+                    box_.remove_css_class("scan-drop-after");
+                    if !obj.reorder_enabled.get() {
+                        return false;
+                    }
+                    let Ok(thumbnail) = value.get::<PpsThumbnailItem>() else {
+                        return false;
+                    };
+                    // Only accept a page from this document's current thumbnail model.
+                    let Some(from) = obj.list_store.find(&thumbnail) else {
+                        return false;
+                    };
+                    let from = obj.page_of_document(from as i32);
+                    let target = obj.page_of_document(item.position() as i32);
+                    if from < 0 || target < 0 {
+                        return false;
+                    }
+                    let before = target as u32 + u32::from(y >= f64::from(box_.height()) / 2.0);
+                    obj.obj()
+                        .emit_by_name::<()>("page-reordered", &[&(from as u32), &before]);
+                    true
+                }
+            ));
+            box_.add_controller(target);
             item.set_child(Some(&box_));
         }
 

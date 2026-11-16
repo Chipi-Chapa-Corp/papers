@@ -187,6 +187,7 @@ mod imp {
             self.page_changed_handler.replace(Some(id));
 
             self.model.replace(Some(model));
+            self.update_document();
         }
 
         fn update_document(&self) {

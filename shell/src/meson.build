@@ -47,7 +47,7 @@ custom_target(
   install_dir: get_option('bindir'),
   output: 'dokument',
   command: [
-    'cp',
+    'cp', '-f',
     cargo_target_dir / rust_target / 'dokument',
     '@OUTPUT@',
   ],

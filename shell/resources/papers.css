@@ -129,6 +129,14 @@ pps-sidebar-thumbnails picture {
     border-radius: 6px;
 }
 
+pps-sidebar-thumbnails .scan-drop-before {
+    box-shadow: inset 0 3px var(--accent-bg-color);
+}
+
+pps-sidebar-thumbnails .scan-drop-after {
+    box-shadow: inset 0 -3px var(--accent-bg-color);
+}
+
 pps-sidebar-thumbnails.columns-1 gridview > child {
     padding: 12px 12px 6px;
     border-radius: 12px;
@@ -310,3 +318,12 @@ window.pps-annotation-window textview {
 tabbar.document-tabs-shadow {
     box-shadow: 0 3px 8px -3px color-mix(in srgb, var(--headerbar-shade-color) 75%, transparent);
 }
+
+/* Preferences use a light-dismiss overlay instead of a native popup grab. */
+.scan-preferences-backdrop, .scan-preferences-backdrop:hover, .scan-preferences-backdrop:active {
+    background: alpha(black, 0.15);
+    border-radius: 0;
+    box-shadow: none;
+    padding: 0;
+}
+.scan-preferences-card { padding: 16px; }

@@ -52,7 +52,7 @@ jobs:
           cairo-devel dbus-devel djvulibre-devel exempi-devel
           glib2-devel gobject-introspection-devel gsettings-desktop-schemas-devel
           gtk4-devel libadwaita-devel libarchive-devel libsecret-devel
-          libtiff-devel poppler-glib-devel zlib-devel
+          libtiff-devel poppler-glib-devel zlib-devel sane-backends-devel sane-backends-drivers-scanners
           xorg-x11-server-Xvfb xorg-x11-xauth dbus-daemon
       - uses: actions/checkout@v4
         with:
@@ -60,7 +60,7 @@ jobs:
       - name: Configure
         run: >-
           meson setup _build --buildtype=${{ matrix.buildtype }}
-          -Dprofile=devel -Ddocumentation=false -Duser_doc=false -Dnautilus=false
+          -Dprofile=devel -Dscanning=enabled -Ddocumentation=false -Duser_doc=false -Dnautilus=false
       - uses: actions/cache@v4
         with:
           path: |

@@ -187,3 +187,56 @@ fn closing_or_canceling_a_load_releases_its_pending_work() {
         window.destroy();
     });
 }
+
+#[test]
+fn opening_a_document_does_not_replace_a_scan_session() {
+    crate::tests::run(|| {
+        let window = PpsWindow::new();
+        let scan_tab = window.new_tab();
+        let scan: crate::scan_view::PpsScanView = glib::Object::new();
+        scan_tab.imp().scan_box.append(&scan);
+        scan_tab.imp().scan_view.replace(Some(scan));
+        scan_tab.imp().set_mode(WindowRunMode::ScanView);
+        assert!(!scan_tab.is_empty());
+        assert!(scan_tab.tab_bar_host().is_some());
+        window.open(&crate::tests::fixture("utf16le-annot.pdf"), None, None);
+        let tabs = crate::tests::find_widget_where::<adw::TabView>(&window, &|_| true).unwrap();
+        assert_eq!(tabs.n_pages(), 2);
+        assert!(scan_tab.document().is_none());
+        assert_eq!(scan_tab.imp().mode.get(), WindowRunMode::ScanView);
+        window.destroy();
+    });
+}
+
+#[test]
+fn scan_button_replaces_configuration_in_the_same_tab() {
+    crate::tests::run(|| {
+        let window = PpsWindow::new();
+        let setup_tab = window.new_tab();
+        let setup = setup_tab.imp().ensure_scan_view();
+        setup_tab.imp().set_mode(WindowRunMode::ScanView);
+        // No devices are supplied, so acquisition cannot touch real hardware.
+        setup.emit_by_name::<()>("start-scan", &[]);
+        let tabs = crate::tests::find_widget_where::<adw::TabView>(&window, &|_| true).unwrap();
+        assert_eq!(tabs.n_pages(), 1);
+        let canvas_tab = tabs
+            .selected_page()
+            .unwrap()
+            .child()
+            .downcast::<PpsDocumentTab>()
+            .unwrap();
+        assert_eq!(canvas_tab, setup_tab);
+        assert!(setup.is_canvas());
+        assert!(
+            canvas_tab
+                .imp()
+                .scan_view
+                .borrow()
+                .as_ref()
+                .unwrap()
+                .is_canvas()
+        );
+        assert_eq!(canvas_tab.display_name(), gettext("Scanned Document"));
+        window.destroy();
+    });
+}

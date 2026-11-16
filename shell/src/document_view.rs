@@ -55,6 +55,8 @@ mod imp {
         #[template_child]
         pub(super) page_selector: TemplateChild<PpsPageSelector>,
         #[template_child]
+        pub(super) document_menu_button: TemplateChild<gtk::MenuButton>,
+        #[template_child]
         pub(super) zoom_fit_best_revealer: TemplateChild<gtk::Revealer>,
         #[template_child]
         pub(super) banner: TemplateChild<adw::Banner>,
@@ -112,6 +114,8 @@ mod imp {
         #[template_child]
         pub(super) sidebar_annots: TemplateChild<PpsSidebarAnnotations>,
         #[template_child]
+        pub(super) sidebar_thumbs: TemplateChild<PpsSidebarThumbnails>,
+        #[template_child]
         pub(super) sidebar_links: TemplateChild<PpsSidebarLinks>,
         #[template_child]
         pub(super) sidebar_attachments: TemplateChild<PpsSidebarAttachments>,
@@ -120,6 +124,10 @@ mod imp {
 
         #[template_child]
         pub(super) header_bar: TemplateChild<adw::HeaderBar>,
+        #[template_child]
+        pub(super) sidebar_button: TemplateChild<gtk::ToggleButton>,
+        pub(super) scan_mode: Cell<bool>,
+        pub(super) scan_had_document: Cell<bool>,
         #[template_child]
         pub(super) scrolled_window: TemplateChild<gtk::ScrolledWindow>,
         #[template_child]
@@ -523,7 +531,8 @@ mod imp {
                 .is_some_and(|d| d.can_add_annotation())
             {
                 self.annot_toolbar.set_visible(true);
-                self.zoom_toolbar.set_margin_bottom(70);
+                self.zoom_toolbar
+                    .set_margin_bottom(if self.scan_mode.get() { 0 } else { 70 });
             } else {
                 self.annot_toolbar.set_visible(false);
                 self.zoom_toolbar
@@ -945,6 +954,132 @@ impl PpsDocumentView {
 
     pub fn model(&self) -> DocumentModel {
         self.imp().model.clone()
+    }
+
+    pub fn configure_for_scanning(&self) {
+        // Save/export stay in the document menu; page tools live in the scan toolbar.
+        fn filtered(model: &gio::MenuModel) -> gio::Menu {
+            let output = gio::Menu::new();
+            for index in 0..model.n_items() {
+                if let Some(section) = model.item_link(index, "section") {
+                    let section = filtered(&section);
+                    if section.n_items() > 0 {
+                        output.append_section(None, &section);
+                    }
+                } else {
+                    let action = model
+                        .item_attribute_value(index, "action", None)
+                        .and_then(|v| v.get::<String>());
+                    if !matches!(
+                        action.as_deref(),
+                        Some(
+                            "doc.rotate-right"
+                                | "doc.save-as"
+                                | "doc.print"
+                                | "doc.open-copy"
+                                | "doc.open-with"
+                        )
+                    ) {
+                        output.append_item(&gio::MenuItem::from_model(model, index));
+                    }
+                }
+            }
+            output
+        }
+        let imp = self.imp();
+        if let Some(model) = imp.document_menu_button.menu_model() {
+            let menu = gio::Menu::new();
+            let save = gio::Menu::new();
+            save.append(Some(&gettext("Save PDF…")), Some("scan.save"));
+            let export = gio::Menu::new();
+            export.append(Some(&gettext("Print…")), Some("doc.print"));
+            export.append(Some(&gettext("Email…")), Some("scan.email"));
+            save.append_submenu(Some(&gettext("Export")), &export);
+            menu.append_section(None, &save);
+            let edit = gio::Menu::new();
+            edit.append(
+                Some(&gettext("Move Page Earlier")),
+                Some("scan.move-earlier"),
+            );
+            edit.append(Some(&gettext("Move Page Later")), Some("scan.move-later"));
+            edit.append(Some(&gettext("Remove Page")), Some("scan.delete-page"));
+            menu.append_section(None, &edit);
+            let original = filtered(&model);
+            for index in 0..original.n_items() {
+                menu.append_item(&gio::MenuItem::from_model(&original, index));
+            }
+            imp.document_menu_button.set_menu_model(Some(&menu));
+            if let Some(popover) = imp.document_menu_button.popover() {
+                // Keep the menu's trailing edge anchored when sliding to/from Export.
+                popover.set_halign(gtk::Align::End);
+            }
+        }
+        imp.scan_mode.set(true);
+        self.model().connect_document_notify(glib::clone!(
+            #[weak(rename_to=obj)]
+            self,
+            move |_| obj.update_scan_chrome()
+        ));
+        self.update_scan_chrome();
+        self.set_filenames(&gettext("Scanned Document"), "Scan.pdf");
+    }
+
+    fn update_scan_chrome(&self) {
+        let imp = self.imp();
+        if !imp.scan_mode.get() {
+            return;
+        }
+        let has_pages = self.model().document().is_some_and(|doc| doc.n_pages() > 0);
+        imp.zoom_toolbar.set_visible(has_pages);
+        imp.annot_toolbar.set_visible(has_pages);
+        imp.sidebar_button.set_visible(has_pages);
+        if !has_pages {
+            imp.split_view.set_show_sidebar(false);
+        } else if !imp.scan_had_document.get() {
+            imp.sidebar_stack.set_visible_child(&imp.sidebar.get());
+            imp.sidebar.set_visible_child_name("thumbnails");
+            if !imp.split_view.is_collapsed() {
+                imp.split_view.set_show_sidebar(true);
+            }
+        }
+        imp.scan_had_document.set(has_pages);
+    }
+
+    pub fn dock_scan_view_controls(&self) -> gtk::Box {
+        let imp = self.imp();
+        let tools = gtk::Box::builder()
+            .spacing(8)
+            .valign(gtk::Align::Center)
+            .build();
+        for widget in [imp.zoom_toolbar.get(), imp.annot_toolbar.get()] {
+            if let Some(parent) = widget.parent().and_downcast::<gtk::Overlay>() {
+                parent.remove_overlay(&widget);
+            }
+            widget.set_orientation(gtk::Orientation::Horizontal);
+            widget.set_margin_top(0);
+            widget.set_margin_bottom(0);
+            widget.set_margin_start(0);
+            widget.set_margin_end(0);
+            widget.set_valign(gtk::Align::Center);
+            widget.set_halign(gtk::Align::Start);
+            let mut child = widget.first_child();
+            while let Some(item) = child {
+                child = item.next_sibling();
+                if item.is::<gtk::Separator>() {
+                    widget.remove(&item);
+                }
+            }
+            tools.append(&widget);
+        }
+        tools
+    }
+
+    pub fn close_document_menu(&self) {
+        self.imp().document_menu_button.popdown();
+    }
+
+    pub fn scan_thumbnails(&self) -> PpsSidebarThumbnails {
+        self.imp().sidebar_thumbs.get()
     }
 
     pub fn tab_bar_host(&self) -> adw::ToolbarView {

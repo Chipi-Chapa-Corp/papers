@@ -23,7 +23,11 @@
         "--filesystem=/run/media:ro",
         "--filesystem=xdg-run/gvfsd",
         "--filesystem=xdg-run/gvfs",
-        "--env=G_DEBUG=fatal-criticals"
+        "--env=G_DEBUG=fatal-criticals",
+        "--device=all",
+        "--share=network",
+        "--system-talk-name=org.freedesktop.Avahi",
+        "--env=SANE_CONFIG_DIR=/app/etc/sane.d"
     ],
     "build-options": {
         "append-path": "/usr/lib/sdk/rust-stable/bin:",
@@ -130,6 +134,89 @@
             ]
         },
         {
+            "name": "libusb",
+            "buildsystem": "autotools",
+            "config-opts": [
+                "--disable-udev"
+            ],
+            "sources": [
+                {
+                    "type": "git",
+                    "url": "https://github.com/libusb/libusb.git",
+                    "tag": "v1.0.29"
+                }
+            ]
+        },
+        {
+            "name": "sane-backends",
+            "buildsystem": "autotools",
+            "sources": [
+                {
+                    "type": "git",
+                    "url": "https://gitlab.com/sane-project/backends.git",
+                    "commit": "c7e4b5e35e3d614d2b1181d760a717bfc395a203",
+                    "tag": "1.4.0"
+                }
+            ],
+            "config-opts": [
+                "--disable-saned",
+                "--without-snmp",
+                "--disable-avahi"
+            ]
+        },
+        {
+            "name": "avahi",
+            "cleanup": [
+                "/bin",
+                "/lib/avahi",
+                "/share/applications/*.desktop",
+                "/share/avahi"
+            ],
+            "config-opts": [
+                "--with-distro=none",
+                "--disable-introspection",
+                "--disable-qt3",
+                "--disable-qt4",
+                "--disable-qt5",
+                "--disable-gtk",
+                "--disable-gtk3",
+                "--disable-core-docs",
+                "--disable-manpages",
+                "--disable-libdaemon",
+                "--disable-python",
+                "--disable-pygobject",
+                "--disable-mono",
+                "--disable-monodoc",
+                "--disable-autoipd",
+                "--disable-doxygen-doc",
+                "--disable-doxygen-dot",
+                "--disable-doxygen-xml",
+                "--disable-doxygen-html",
+                "--disable-manpages",
+                "--disable-xmltoman"
+            ],
+            "sources": [
+                {
+                    "type": "git",
+                    "url": "https://github.com/lathiat/avahi.git",
+                    "commit": "f060abee2807c943821d88839c013ce15db17b58",
+                    "tag": "v0.8"
+                }
+            ]
+        },
+        {
+            "name": "sane-airscan",
+            "buildsystem": "meson",
+            "sources": [
+                {
+                    "type": "git",
+                    "url": "https://github.com/alexpevzner/sane-airscan.git",
+                    "tag": "0.99.38",
+                    "commit": "9da18d88c88f542671b24fc0433dd7d69dcb0132"
+                }
+            ]
+        },
+        {
             "name": "dokument",
             "buildsystem": "meson",
             "config-opts": [
@@ -140,7 +227,8 @@
                 "-Duser_doc=true",
                 "-Dprofile=devel",
                 "-Dtests=false",
-                "--libdir=/app/lib"
+                "--libdir=/app/lib",
+                "-Dscanning=enabled"
             ],
             "sources": [
                 {

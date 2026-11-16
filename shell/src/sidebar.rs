@@ -59,7 +59,7 @@ mod imp {
             let Some(document) = self.document() else {
                 return;
             };
-
+            self.obj().set_visible(true);
             let mut first_supported_page = None;
 
             for page in self.stack.pages().iter::<adw::ViewStackPage>() {
@@ -102,6 +102,7 @@ mod imp {
             ));
 
             self.model.replace(Some(model));
+            self.document_changed();
         }
 
         fn document(&self) -> Option<Document> {

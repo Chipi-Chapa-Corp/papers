@@ -4,7 +4,7 @@ set -e
 
 exitval=0
 
-formattable="$(find libdocument/ libview/ nautilus/ previewer/ thumbnailer/ \( -name "*.c" -o -name "*.h" \))"
+formattable="$(find libdocument/ libview/ nautilus/ previewer/ thumbnailer/ worker/ \( -name "*.c" -o -name "*.h" \))"
 unformatted="$(for f in $formattable; do clang-format $f > $f.clang-format && diff -uN $f $f.clang-format || echo "$f"; done)"
 
 if [ ${#unformatted} -ne 0 ]; then

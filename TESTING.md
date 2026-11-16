@@ -23,7 +23,8 @@ flatpak run com.chipichapa.Dokument.Devel
 ## Native builds
 
 Install the development dependencies for GTK 4, libadwaita, Poppler, Exempi,
-libarchive, DjVuLibre, libtiff, libsecret, and the Rust and Meson toolchains.
+libarchive, DjVuLibre, libtiff, libsecret, SANE (`sane-backends-devel` on Fedora),
+and the Rust and Meson toolchains.
 Then build from the repository root:
 
 ```sh
@@ -55,3 +56,20 @@ flatpak run --command=sh --devel com.chipichapa.Dokument.Devel
 
 Inside the shell, `gdb --args dokument document.pdf` starts a debugging session.
 Attach relevant logs or a backtrace to the GitHub issue.
+
+## Scanning without hardware
+
+The `scan-worker` test uses a temporary SANE configuration that enables only
+SANE’s virtual `test` backend. Install the scanner drivers package to enable it
+(`sane-backends-drivers-scanners` on Fedora). No physical scanners are used.
+
+The scan view tests cover scanner progress, native PDF navigation, page and
+whole-document edits, annotation preservation across edits and repeated exports,
+sidebar layout, menu actions, dismissible preferences, recropping from the
+original page, and physical paper sizes. The `pps-selection-gui` regression
+replaces a live text selection during a text request to check snapshot ownership.
+Run these GTK tests through the private GUI helper described above.
+
+For native Toolbx builds, the scan worker uses the host system bus socket when
+the container has no system bus. This lets SANE’s network backends discover
+scanners through Avahi. The graphical application keeps its own session bus.

@@ -16,6 +16,7 @@ mod tests;
 pub enum WindowRunMode {
     #[default]
     StartView,
+    ScanView,
     Normal,
     Fullscreen,
     Presentation,

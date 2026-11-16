@@ -23,5 +23,6 @@ PPS_PUBLIC
 void pps_shutdown (void);
 
 gboolean _pps_is_initialized (void);
+gboolean _pps_is_main_thread (void);
 
 G_END_DECLS

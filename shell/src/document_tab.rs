@@ -39,6 +39,9 @@ mod imp {
         pub(super) start_toolbar_view: TemplateChild<adw::ToolbarView>,
         #[template_child]
         pub(super) error_toolbar_view: TemplateChild<adw::ToolbarView>,
+        #[template_child]
+        pub(super) scan_box: TemplateChild<gtk::Box>,
+        pub(super) scan_view: RefCell<Option<crate::scan_view::PpsScanView>>,
         // stack and views inside it
         #[template_child]
         pub(super) stack: TemplateChild<adw::ViewStack>,
@@ -67,7 +70,7 @@ mod imp {
 
         #[property(get = Self::title)]
         pub(super) title: std::marker::PhantomData<String>,
-        #[property(get = |imp: &Self| imp.document_view.modified())]
+        #[property(get = |imp: &Self| imp.document_view.modified() || imp.scan_view.borrow().as_ref().is_some_and(|scan| scan.dirty()))]
         pub(super) modified: std::marker::PhantomData<bool>,
         #[property(get = |imp: &Self| imp.load_job.borrow().is_some())]
         pub(super) loading: std::marker::PhantomData<bool>,
@@ -231,6 +234,18 @@ mod imp {
         }
 
         fn title(&self) -> String {
+            if self.mode.get() == WindowRunMode::ScanView {
+                return if self
+                    .scan_view
+                    .borrow()
+                    .as_ref()
+                    .is_some_and(|view| view.is_canvas())
+                {
+                    gettext("Scanned Document")
+                } else {
+                    gettext("Scan a Document")
+                };
+            }
             if self.document_view.is_empty() && !self.display_name.borrow().is_empty() {
                 self.display_name.borrow().clone()
             } else {
@@ -321,6 +336,7 @@ mod imp {
                 WindowRunMode::Normal => stack.set_visible_child_name("document"),
                 WindowRunMode::PasswordView => stack.set_visible_child_name("password"),
                 WindowRunMode::StartView => stack.set_visible_child_name("start"),
+                WindowRunMode::ScanView => stack.set_visible_child_name("scan"),
                 WindowRunMode::LoaderView => stack.set_visible_child_name("loader"),
                 WindowRunMode::ErrorView => stack.set_visible_child_name("error"),
                 WindowRunMode::Presentation => stack.set_visible_child_name("presentation"),
@@ -1082,6 +1098,90 @@ mod imp {
             self.obj().emit_by_name::<()>("close-finished", &[&allowed]);
         }
 
+        pub(super) fn ensure_scan_view(&self) -> crate::scan_view::PpsScanView {
+            if let Some(view) = self.scan_view.borrow().as_ref().cloned() {
+                return view;
+            }
+            let view: crate::scan_view::PpsScanView = glib::Object::new();
+            view.connect_local(
+                "changed",
+                false,
+                glib::clone!(
+                    #[weak(rename_to = obj)]
+                    self,
+                    #[upgrade_or_default]
+                    move |_| {
+                        obj.obj().notify_modified();
+                        None
+                    }
+                ),
+            );
+            view.connect_local(
+                "close-finished",
+                false,
+                glib::clone!(
+                    #[weak(rename_to = obj)]
+                    self,
+                    #[upgrade_or_default]
+                    move |values| {
+                        obj.document_view_close_finished(values[1].get::<bool>().unwrap());
+                        None
+                    }
+                ),
+            );
+            view.connect_local(
+                "back",
+                false,
+                glib::clone!(
+                    #[weak(rename_to = obj)]
+                    self,
+                    #[upgrade_or_default]
+                    move |_| {
+                        if let Some(view) = obj.scan_view.take() {
+                            obj.scan_box.remove(&view);
+                        }
+                        obj.display_name.borrow_mut().clear();
+                        obj.obj().notify_display_name();
+                        obj.set_mode(WindowRunMode::StartView);
+                        obj.obj().notify_title();
+                        obj.obj().notify_modified();
+                        None
+                    }
+                ),
+            );
+            view.connect_local(
+                "start-scan",
+                false,
+                glib::clone!(
+                    #[weak(rename_to = obj)]
+                    self,
+                    #[upgrade_or_default]
+                    move |values| {
+                        let view = values[0].get::<crate::scan_view::PpsScanView>().unwrap();
+                        view.enter_canvas();
+                        obj.display_name.replace(gettext("Scanned Document"));
+                        obj.obj().notify_display_name();
+                        obj.obj().notify_title();
+                        view.begin_scan();
+                        None
+                    }
+                ),
+            );
+            self.scan_box.append(&view);
+            self.scan_view.replace(Some(view.clone()));
+            view
+        }
+
+        #[template_callback]
+        fn start_scan_clicked(&self) {
+            let view = self.ensure_scan_view();
+            self.display_name.replace(gettext("Scan a Document"));
+            self.obj().notify_display_name();
+            self.set_mode(WindowRunMode::ScanView);
+            self.obj().notify_title();
+            view.discover();
+        }
+
         #[template_callback]
         fn night_mode_changed(&self) {
             self.document_view
@@ -1191,24 +1291,40 @@ impl PpsDocumentTab {
         imp.open(file, dest, mode);
     }
     pub fn document(&self) -> Option<Document> {
+        if let Some(scan) = self.imp().scan_view.borrow().as_ref() {
+            return scan.viewer().model().document();
+        }
         self.imp().document_view.model().document()
     }
     pub fn is_empty(&self) -> bool {
-        self.imp().document_view.is_empty() && self.imp().load_job.borrow().is_none()
+        self.imp().mode.get() != WindowRunMode::ScanView
+            && self.imp().document_view.is_empty()
+            && self.imp().load_job.borrow().is_none()
     }
     pub fn metadata(&self) -> Option<papers_view::Metadata> {
         self.imp().metadata.borrow().clone()
     }
     pub fn print_range(&self, first_page: i32, last_page: i32) {
-        self.imp().document_view.print_range(first_page, last_page);
+        if let Some(scan) = self.imp().scan_view.borrow().as_ref() {
+            scan.viewer().print_range(first_page, last_page);
+        } else {
+            self.imp().document_view.print_range(first_page, last_page);
+        }
     }
     pub fn request_close(&self) -> bool {
+        if self.imp().mode.get() == WindowRunMode::ScanView {
+            if let Some(view) = self.imp().scan_view.borrow().as_ref().cloned() {
+                view.confirm_leave(false);
+            }
+            return true;
+        }
         self.imp().document_view.request_close()
     }
     pub fn tab_bar_host(&self) -> Option<adw::ToolbarView> {
         let imp = self.imp();
         match imp.mode.get() {
             WindowRunMode::StartView => Some(imp.start_toolbar_view.get()),
+            WindowRunMode::ScanView => imp.scan_view.borrow().as_ref().map(|scan| scan.toolbar()),
             WindowRunMode::ErrorView => Some(imp.error_toolbar_view.get()),
             WindowRunMode::LoaderView => imp.loader_view.child().and_downcast(),
             WindowRunMode::PasswordView => imp.password_view.child().and_downcast(),
@@ -1220,9 +1336,15 @@ impl PpsDocumentTab {
     }
 
     pub fn set_fullscreen_mode(&self, fullscreened: bool) {
+        if let Some(scan) = self.imp().scan_view.borrow().as_ref() {
+            scan.viewer().set_fullscreen_mode(fullscreened);
+        }
         self.imp().document_view.set_fullscreen_mode(fullscreened);
     }
     pub fn set_inverted_colors(&self, inverted: bool) {
+        if let Some(scan) = self.imp().scan_view.borrow().as_ref() {
+            scan.viewer().set_inverted_colors(inverted);
+        }
         self.imp().document_view.set_inverted_colors(inverted);
     }
     pub fn is_presenting(&self) -> bool {

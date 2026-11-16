@@ -54,3 +54,12 @@ if enable_gtk_unix_print
   )
   test('pps-print-operation-gui', print_operation_test, suite: 'gui', is_parallel: false, env: backend_env, depends: document_worker)
 endif
+
+selection_test = executable(
+  'test-pps-selection',
+  'test-pps-selection.c',
+  include_directories: [top_inc, libview_inc],
+  dependencies: libppsview_dep,
+  c_args: cflags,
+)
+test('pps-selection-gui', selection_test, suite: 'gui', is_parallel: false, env: backend_env)

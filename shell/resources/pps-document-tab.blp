@@ -23,33 +23,148 @@ template $PpsDocumentTab: Adw.Bin {
         child: Adw.ToolbarView start_toolbar_view {
           [top]
           Adw.HeaderBar {
+            [start]
+            Button {
+              icon-name: "list-add-symbolic";
+              action-name: "win.new-tab";
+              tooltip-text: _("New Tab");
+            }
+
             [end]
             MenuButton {
-              icon-name: "open-menu-symbolic";
+              icon-name: "view-more-symbolic";
               tooltip-text: _("Main Menu");
               menu-model: app_menu;
               primary: true;
             }
           }
 
-          content: Adw.StatusPage {
-            icon-name: "papers-rich-text";
-            title: _("Open a Document");
-            description: _("Drag and drop documents here");
+          content: Adw.BreakpointBin {
+            width-request: 360;
+            height-request: 360;
 
-            child: Button open_button {
-              halign: center;
-              action-name: "win.open";
-              label: _("_Open…");
-              use-underline: true;
-              tooltip-text: C_("tooltip", "Open a Document");
+            Adw.Breakpoint {
+              condition ("max-width: 550sp")
 
-              styles [
-                "suggested-action",
-                "pill",
-              ]
+              setters {
+                new_tab_options.orientation: vertical;
+                new_tab_options.spacing: 32;
+              }
+            }
+
+            child: ScrolledWindow {
+              hscrollbar-policy: never;
+
+              child: Box new_tab_options {
+                spacing: 48;
+                halign: center;
+                valign: center;
+                margin-top: 32;
+                margin-bottom: 32;
+                margin-start: 24;
+                margin-end: 24;
+
+                Box {
+                  orientation: vertical;
+                  spacing: 16;
+                  width-request: 220;
+
+                  Image {
+                    icon-name: "papers-rich-text";
+                    pixel-size: 96;
+
+                    styles [
+                      "dim-label",
+                    ]
+                  }
+
+                  Label {
+                    label: _("Open a Document");
+                    wrap: true;
+                    justify: center;
+
+                    styles [
+                      "title-1",
+                    ]
+                  }
+
+                  Label {
+                    label: _("Drag and drop documents here");
+                    wrap: true;
+                    justify: center;
+                    height-request: 20;
+
+                    styles [
+                      "dim-label",
+                    ]
+                  }
+
+                  Button open_button {
+                    halign: center;
+                    width-request: 128;
+                    action-name: "win.open";
+                    label: _("_Open…");
+                    use-underline: true;
+
+                    styles [
+                      "suggested-action",
+                      "pill",
+                    ]
+                  }
+                }
+
+                Box {
+                  orientation: vertical;
+                  spacing: 16;
+                  width-request: 220;
+
+                  Image {
+                    icon-name: "scanner-symbolic";
+                    pixel-size: 96;
+
+                    styles [
+                      "dim-label",
+                    ]
+                  }
+
+                  Label {
+                    label: _("Scan a Document");
+                    wrap: true;
+                    justify: center;
+
+                    styles [
+                      "title-1",
+                    ]
+                  }
+
+                  Box {
+                    height-request: 20;
+                  }
+
+                  Button {
+                    halign: center;
+                    width-request: 128;
+                    label: _("_Scan…");
+                    use-underline: true;
+                    clicked => $start_scan_clicked() swapped;
+
+                    styles [
+                      "suggested-action",
+                      "pill",
+                    ]
+                  }
+                }
+              };
             };
           };
+        };
+      }
+
+      Adw.ViewStackPage {
+        name: "scan";
+
+        child: Box scan_box {
+          orientation: vertical;
         };
       }
 

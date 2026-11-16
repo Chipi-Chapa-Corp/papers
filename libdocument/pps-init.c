@@ -16,6 +16,7 @@
 #include "pps-init.h"
 
 static int pps_init_count;
+static GThread *pps_init_thread;
 
 /**
  * pps_init:
@@ -36,6 +37,7 @@ pps_init (void)
 	if (pps_init_count++ > 0)
 		return have_backends;
 
+	pps_init_thread = g_thread_self ();
 	/* set up translation catalog */
 	bindtextdomain (GETTEXT_PACKAGE, PPS_LOCALEDIR);
 	bind_textdomain_codeset (GETTEXT_PACKAGE, "UTF-8");
@@ -75,4 +77,10 @@ gboolean
 _pps_is_initialized (void)
 {
 	return pps_init_count > 0;
+}
+
+gboolean
+_pps_is_main_thread (void)
+{
+	return pps_init_thread == g_thread_self ();
 }

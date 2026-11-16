@@ -74,6 +74,7 @@ shell/src/properties_general.rs
 shell/src/properties_license.rs
 shell/src/properties_signatures.rs
 shell/src/properties_window.rs
+shell/src/scan_view.rs
 shell/src/sidebar_annotations.rs
 shell/src/sidebar_annotations_row.rs
 shell/src/sidebar_attachments.rs

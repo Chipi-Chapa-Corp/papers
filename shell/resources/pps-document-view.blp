@@ -230,10 +230,14 @@ template $PpsDocumentView: Adw.BreakpointBin {
         }
 
         [end]
-        $PpsPageSelector page_selector {
-          model: "model";
-          tooltip-text: _("Page Count");
-          activate-link => $link_activated() swapped;
+        Revealer {
+          reveal-child: bind page_selector.sensitive;
+
+          child: $PpsPageSelector page_selector {
+            model: "model";
+            tooltip-text: _("Page Count");
+            activate-link => $link_activated() swapped;
+          };
         }
       }
 

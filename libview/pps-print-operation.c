@@ -2007,7 +2007,7 @@ pps_print_operation_print_create_custom_widget (PpsPrintOperationPrint *print,
 	gtk_grid_attach (GTK_GRID (grid), label, 0, 0, 1, 1);
 
 	/* translators: Value for 'Page Scaling:' to not scale the document pages on printing */
-	print->scale_dropdown = gtk_drop_down_new_from_strings ((const char *[]){
+	print->scale_dropdown = gtk_drop_down_new_from_strings ((const char *[]) {
 	    _ ("None"),
 	    _ ("Shrink to Printable Area"),
 	    _ ("Fit to Printable Area"),

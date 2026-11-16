@@ -62,7 +62,7 @@ def package(repository, pages, assets, run=subprocess.run):
     for name in ["dokument.flatpakref", "dokument.flatpakrepo"]:
         shutil.copyfile(PACKAGING / name, repository / name)
         shutil.copyfile(PACKAGING / name, assets / name)
-    shutil.copyfile(ROOT / "data/icons/scalable/apps/org.gnome.Papers.svg", repository / "dokument.svg")
+    shutil.copyfile(ROOT / "data/icons/scalable/apps/com.chipichapa.Dokument.svg", repository / "dokument.svg")
     commit = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip()
     (repository / "dokument-build.json").write_text(json.dumps({
         "version": value, "commit": commit, "appId": APP_ID,

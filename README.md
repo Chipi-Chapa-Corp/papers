@@ -78,4 +78,4 @@ and [libppsdocument](https://gnome.pages.gitlab.gnome.org/papers/document/).
 
 The [GNOME Code of Conduct](https://conduct.gnome.org/) applies when interacting with this project.
 
-[logo]: data/icons/scalable/apps/org.gnome.Papers.svg
+[logo]: data/icons/scalable/apps/com.chipichapa.Dokument.svg

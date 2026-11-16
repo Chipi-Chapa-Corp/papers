@@ -4,3 +4,5 @@ _build/
 po/papers.pot
 *.clang-format
 target/
+dist/
+__pycache__/

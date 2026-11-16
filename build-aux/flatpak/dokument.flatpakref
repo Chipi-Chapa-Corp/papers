@@ -1,0 +1,8 @@
+[Flatpak Ref]
+Name=com.chipichapa.Dokument
+Branch=stable
+Title=Dokument
+Url=https://chipi-chapa-corp.github.io/papers/flatpak
+RuntimeRepo=https://dl.flathub.org/repo/flathub.flatpakrepo
+IsRuntime=false
+SuggestRemoteName=dokument

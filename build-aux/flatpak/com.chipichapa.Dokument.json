@@ -1,0 +1,244 @@
+{
+    "app-id": "com.chipichapa.Dokument",
+    "runtime": "org.gnome.Platform",
+    "runtime-version": "51",
+    "sdk": "org.gnome.Sdk",
+    "sdk-extensions": [
+        "org.freedesktop.Sdk.Extension.rust-stable"
+    ],
+    "command": "dokument",
+    "copy-icon": true,
+    "finish-args": [
+        "--share=ipc",
+        "--socket=fallback-x11",
+        "--device=dri",
+        "--socket=wayland",
+        "--socket=pulseaudio",
+        "--talk-name=org.gtk.vfs.*",
+        "--filesystem=home:ro",
+        "--filesystem=/media:ro",
+        "--filesystem=/run/media:ro",
+        "--filesystem=xdg-run/gvfsd",
+        "--filesystem=xdg-run/gvfs",
+        "--device=all",
+        "--share=network",
+        "--system-talk-name=org.freedesktop.Avahi",
+        "--env=SANE_CONFIG_DIR=/app/etc/sane.d"
+    ],
+    "build-options": {
+        "append-path": "/usr/lib/sdk/rust-stable/bin:",
+        "build-args": [
+            "--share=network"
+        ],
+        "cflags": "-O2 -g",
+        "cxxflags": "-O2 -g",
+        "env": {
+            "V": "1"
+        }
+    },
+    "cleanup": [
+        "/include",
+        "/lib/pkgconfig",
+        "/share/pkgconfig",
+        "/share/aclocal",
+        "/man",
+        "/share/man",
+        "/share/gtk-doc",
+        "/share/vala",
+        "*.la",
+        "*.a"
+    ],
+    "modules": [
+        {
+            "name": "popplerdata",
+            "sources": [
+                {
+                    "type": "archive",
+                    "url": "https://poppler.freedesktop.org/poppler-data-0.4.12.tar.gz",
+                    "sha256": "c835b640a40ce357e1b83666aabd95edffa24ddddd49b8daff63adb851cdab74"
+                }
+            ],
+            "buildsystem": "cmake-ninja"
+        },
+        {
+            "name": "poppler",
+            "buildsystem": "cmake-ninja",
+            "config-opts": [
+                "-DCMAKE_INSTALL_LIBDIR=/app/lib",
+                "-DCMAKE_INSTALL_INCLUDEDIR=/app/include",
+                "-DBUILD_GTK_TESTS=OFF",
+                "-DBUILD_CPP_TESTS=OFF",
+                "-DENABLE_CPP=OFF",
+                "-DENABLE_BOOST=OFF",
+                "-DENABLE_GOBJECT_INTROSPECTION=OFF",
+                "-DENABLE_LIBOPENJPEG=openjpeg2",
+                "-DENABLE_QT5=OFF",
+                "-DENABLE_QT6=OFF"
+            ],
+            "cleanup": [
+                "/bin"
+            ],
+            "sources": [
+                {
+                    "type": "archive",
+                    "url": "https://poppler.freedesktop.org/poppler-26.10.0.tar.xz",
+                    "sha256": "6792cb7c69205007ad87d2e936cecc5b3a31fac29ab54ffc3175fdb6b2a6ce35"
+                }
+            ]
+        },
+        {
+            "name": "exempi",
+            "config-opts": [
+                "--disable-unittest",
+                "--disable-samples"
+            ],
+            "sources": [
+                {
+                    "type": "git",
+                    "url": "https://gitlab.freedesktop.org/libopenraw/exempi.git",
+                    "tag": "2.6.5",
+                    "x-checker-data": {
+                        "type": "git",
+                        "tag-pattern": "^([\\d.]+)$"
+                    },
+                    "commit": "01ed352bbf18c2be2bdbd0125c88901b9db0b9c3"
+                }
+            ]
+        },
+        {
+            "name": "djvulibre",
+            "config-opts": [
+                "--disable-desktopfiles"
+            ],
+            "cleanup": [
+                "/bin"
+            ],
+            "sources": [
+                {
+                    "type": "archive",
+                    "url": "https://downloads.sourceforge.net/project/djvu/DjVuLibre/3.5.29/djvulibre-3.5.29.tar.gz",
+                    "sha256": "d3b4b03ae2bdca8516a36ef6eb27b777f0528c9eda26745d9962824a3fdfeccf",
+                    "x-checker-data": {
+                        "type": "anitya",
+                        "project-id": 10159,
+                        "url-template": "https://downloads.sourceforge.net/project/djvu/DjVuLibre/$version/djvulibre-$version.tar.gz"
+                    }
+                }
+            ]
+        },
+        {
+            "name": "libusb",
+            "buildsystem": "autotools",
+            "config-opts": [
+                "--disable-udev"
+            ],
+            "sources": [
+                {
+                    "type": "git",
+                    "url": "https://github.com/libusb/libusb.git",
+                    "tag": "v1.0.29"
+                }
+            ]
+        },
+        {
+            "name": "sane-backends",
+            "buildsystem": "autotools",
+            "sources": [
+                {
+                    "type": "git",
+                    "url": "https://gitlab.com/sane-project/backends.git",
+                    "commit": "c7e4b5e35e3d614d2b1181d760a717bfc395a203",
+                    "tag": "1.4.0"
+                }
+            ],
+            "config-opts": [
+                "--disable-saned",
+                "--without-snmp",
+                "--disable-avahi"
+            ]
+        },
+        {
+            "name": "avahi",
+            "cleanup": [
+                "/bin",
+                "/lib/avahi",
+                "/share/applications/*.desktop",
+                "/share/avahi"
+            ],
+            "config-opts": [
+                "--with-distro=none",
+                "--disable-introspection",
+                "--disable-qt3",
+                "--disable-qt4",
+                "--disable-qt5",
+                "--disable-gtk",
+                "--disable-gtk3",
+                "--disable-core-docs",
+                "--disable-manpages",
+                "--disable-libdaemon",
+                "--disable-python",
+                "--disable-pygobject",
+                "--disable-mono",
+                "--disable-monodoc",
+                "--disable-autoipd",
+                "--disable-doxygen-doc",
+                "--disable-doxygen-dot",
+                "--disable-doxygen-xml",
+                "--disable-doxygen-html",
+                "--disable-manpages",
+                "--disable-xmltoman"
+            ],
+            "sources": [
+                {
+                    "type": "git",
+                    "url": "https://github.com/lathiat/avahi.git",
+                    "commit": "f060abee2807c943821d88839c013ce15db17b58",
+                    "tag": "v0.8"
+                }
+            ]
+        },
+        {
+            "name": "sane-airscan",
+            "buildsystem": "meson",
+            "sources": [
+                {
+                    "type": "git",
+                    "url": "https://github.com/alexpevzner/sane-airscan.git",
+                    "tag": "0.99.38",
+                    "commit": "9da18d88c88f542671b24fc0433dd7d69dcb0132"
+                }
+            ]
+        },
+        {
+            "name": "dokument",
+            "buildsystem": "meson",
+            "config-opts": [
+                "-Dnautilus=false",
+                "-Dthumbnailer=false",
+                "-Ddocumentation=false",
+                "-Dintrospection=disabled",
+                "-Duser_doc=true",
+                "-Dprofile=default",
+                "-Dtests=false",
+                "--libdir=/app/lib",
+                "-Dscanning=enabled",
+                "-Dbuildtype=release"
+            ],
+            "sources": [
+                {
+                    "type": "dir",
+                    "path": "../..",
+                    "skip": [
+                        ".git",
+                        "_build",
+                        ".flatpak-builder",
+                        "repo",
+                        "dist",
+                        "target"
+                    ]
+                }
+            ]
+        }
+    ],
+    "branch": "stable"
+}

@@ -1,45 +1,134 @@
-name: Flatpak
+name: Flatpak release
 
 on:
+  push:
+    tags: ['v*']
   workflow_dispatch:
 
 permissions:
   contents: read
 
+# Serialise deployments to the shared stable update repository.
+concurrency:
+  group: flatpak-release
+  cancel-in-progress: false
+
 jobs:
+  metadata:
+    runs-on: ubuntu-24.04
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate release version
+        id: version
+        env:
+          RELEASE_REF: ${{ github.ref }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          args=()
+          if [[ "$RELEASE_REF" == refs/tags/* ]]; then
+            args+=(--tag "$RELEASE_TAG")
+          fi
+          version="$(python3 .github/scripts/flatpak-release.py version "${args[@]}")"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+      - name: Test release packaging
+        run: python3 -m unittest discover -s .github/scripts -p 'test_*.py'
+
+  validate:
+    needs: metadata
+    uses: ./.github/workflows/ci.yml
+
   build:
-    runs-on: ubuntu-latest
+    needs: metadata
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
         with:
           submodules: recursive
       - name: Install Flatpak tools
         run: sudo apt-get update && sudo apt-get install -y flatpak flatpak-builder
-      - name: Add runtime repositories
+      - name: Add stable runtime repository
+        run: flatpak remote-add --user --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
+      - uses: actions/cache@v4
+        with:
+          path: |
+            .flatpak-builder/cache
+            .flatpak-builder/downloads
+            .flatpak-builder/git
+          key: flatpak-x86_64-${{ hashFiles('build-aux/flatpak/com.chipichapa.Dokument.json', 'Cargo.lock') }}
+          restore-keys: flatpak-x86_64-
+      - name: Prepare the checked-out release
         run: |
-          flatpak remote-add --user --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
-          flatpak remote-add --user --if-not-exists gnome-nightly https://nightly.gnome.org/gnome-nightly.flatpakrepo
-      - name: Use the checked-out revision
-        run: |
-          python3 - <<'PY'
-          import json
-          from pathlib import Path
-          manifest = Path('build-aux/flatpak/com.chipichapa.Dokument.Devel.json')
-          data = json.loads(manifest.read_text())
-          data['modules'][-1]['sources'] = [{
-              'type': 'dir', 'path': str(Path.cwd()),
-              'skip': ['.git', '_build', '.flatpak-builder', 'repo'],
-          }]
-          manifest.write_text(json.dumps(data, indent=4) + '\n')
-          PY
-      - name: Build Flatpak
+          python3 .github/scripts/flatpak-release.py prepare dist/flatpak-release.json
+          mkdir -p dist/flatpak-pages
+      - name: Build stable Flatpak
         run: >-
-          flatpak-builder --user --force-clean --repo=repo
-          --install-deps-from=flathub --install-deps-from=gnome-nightly
-          _build/flatpak build-aux/flatpak/com.chipichapa.Dokument.Devel.json
-      - name: Bundle Flatpak
-        run: flatpak build-bundle repo Dokument.Devel.flatpak com.chipichapa.Dokument.Devel
+          flatpak-builder --user --force-clean --disable-rofiles-fuse --jobs=4
+          --repo=dist/flatpak-pages/flatpak --install-deps-from=flathub
+          dist/flatpak-build dist/flatpak-release.json
+      - name: Package update repository and standalone installer
+        run: python3 .github/scripts/flatpak-release.py package
+      - name: Verify installable application
+        run: |
+          flatpak remote-add --user --no-gpg-verify dokument-build "file://$GITHUB_WORKSPACE/dist/flatpak-pages/flatpak"
+          flatpak remote-info --user dokument-build com.chipichapa.Dokument//stable
+          flatpak install --user --assumeyes --noninteractive --no-deps dokument-build com.chipichapa.Dokument//stable
+          (cd dist/release && sha256sum --check SHA256SUMS)
       - uses: actions/upload-artifact@v4
         with:
-          name: Dokument-Devel-x86_64
-          path: Dokument.Devel.flatpak
+          name: Dokument-linux-x86_64
+          path: dist/release/
+          if-no-files-found: error
+          compression-level: 0
+      - uses: actions/upload-pages-artifact@v4
+        with:
+          path: dist/flatpak-pages
+
+  flatpak-pages:
+    name: Publish Flatpak update repository
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    needs: [validate, build]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/configure-pages@v5
+      - name: Deploy Flatpak repository
+        id: deployment
+        uses: actions/deploy-pages@v4
+
+  release:
+    name: Publish GitHub release
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    needs: [metadata, validate, build, flatpak-pages]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: Dokument-linux-x86_64
+          path: release-artifacts
+      - name: Publish versioned downloads
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ github.ref_name }}
+          RELEASE_SHA: ${{ github.sha }}
+          RELEASE_VERSION: ${{ needs.metadata.outputs.version }}
+        run: |
+          # A rerun updates the existing release instead of creating a second one.
+          gh api --paginate "repos/$GH_REPO/releases" --slurp > releases.json
+          release_id="$(python3 -c 'import json, os; print(next((str(r["id"]) for page in json.load(open("releases.json")) for r in page if r["tag_name"] == os.environ["RELEASE_TAG"]), ""))')"
+          if [[ -z "$release_id" ]]; then
+            gh release create "$RELEASE_TAG" --verify-tag --target "$RELEASE_SHA" \
+              --title "Dokument $RELEASE_VERSION" --generate-notes --draft
+          fi
+          gh release upload "$RELEASE_TAG" release-artifacts/* --clobber
+          gh release edit "$RELEASE_TAG" --draft=false
